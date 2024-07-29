@@ -29,19 +29,15 @@
 #include <assert.h>
 #include <debug.h>
 
+#include "xtensa.h"
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
 #include <nuttx/irq.h>
-
+#include <arch/chip/irq.h>
 #include <nuttx/spi/spi.h>
 #include <nuttx/net/w5500.h>
 #include <nuttx/ioexpander/gpio.h>
-
-#include <arch/board/board.h>
-
-#include <arch/board/board.h>
-
-#include "xtensa.h"
 #include "esp32s3-devkit.h"
 #include "esp32s3_spi.h"
 #include "esp32s3_gpio.h"
@@ -193,6 +189,23 @@ static void up_reset(const struct w5500_lower_s *lower, bool reset)
  * Public Functions
  ****************************************************************************/
 
+void esp32s3_spi2_select(struct spi_dev_s *dev, uint32_t devid,
+                         bool selected)
+{
+  switch(devid)
+  {
+    case W5500_DEVNO_1:
+      esp32s3_gpiowrite(g_enclower1.cs_pin, !selected);
+      break;
+    case W5500_DEVNO_2:
+      esp32s3_gpiowrite(g_enclower2.cs_pin, !selected);
+      break;
+    default:
+      break;
+  }
+  
+}
+
 void esp_gw_eth_init(void)
 {
   struct spi_dev_s *spi;
@@ -234,10 +247,10 @@ void esp_gw_eth_init(void)
 
   spi = esp32s3_spibus_initialize(W5500_SPI_PORTNO);
   if (!spi)
-    {
-      nerr("ERROR: Failed to initialize SPI port %d\n", W5500_SPI_PORTNO);
-      return;
-    }
+  {
+    nerr("ERROR: Failed to initialize SPI port %d\n", W5500_SPI_PORTNO);
+    return;
+  }
 
   /* Bind the SPI port to the first W5500 driver */
 
@@ -253,7 +266,7 @@ void esp_gw_eth_init(void)
         W5500_SPI_PORTNO, W5500_DEVNO_1);
 
   /* Bind the SPI port to the second W5500 driver */
-
+  //spi
   ret = w5500_initialize(spi, &g_enclower2.lower, W5500_DEVNO_2);
   if (ret < 0)
     {

@@ -397,7 +397,7 @@ if NET_W5500
 config NET_W5500_NINTERFACES
 	int "Number of physical W5500 devices"
 	default 1
-	range 1 1
+	range 1 2
 	---help---
 		Specifies the number of physical WIZnet W5500
 		devices that will be supported.
