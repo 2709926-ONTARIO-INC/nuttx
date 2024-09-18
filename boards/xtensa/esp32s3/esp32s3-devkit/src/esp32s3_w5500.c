@@ -29,12 +29,10 @@
 #include <assert.h>
 #include <debug.h>
 
-#include "xtensa.h"
-#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
 #include <nuttx/irq.h>
-#include <arch/chip/irq.h>
+
 #include <nuttx/spi/spi.h>
 #include <nuttx/net/w5500.h>
 #include <nuttx/ioexpander/gpio.h>
@@ -99,7 +97,7 @@ static struct esp32s3_lower_s g_enclower1 =
   .lower =
   {
     .frequency = 40000000,
-    .spidevid  = 0,
+    .spidevid  = W5500_DEVNO_1,
     .mode      = SPIDEV_MODE0,
     .attach    = up_attach,
     .enable    = up_enable,
@@ -117,7 +115,7 @@ static struct esp32s3_lower_s g_enclower2 =
   .lower =
   {
     .frequency = 40000000,
-    .spidevid  = 1,
+    .spidevid  = W5500_DEVNO_2,
     .mode      = SPIDEV_MODE0,
     .attach    = up_attach,
     .enable    = up_enable,
@@ -168,7 +166,7 @@ static void up_enable(const struct w5500_lower_s *lower, bool enable)
 
       /* IRQ on falling edge */
 
-      esp32s3_gpioirqenable(irq, FALLING);
+      esp32s3_gpioirqenable(irq, ONLOW);
     }
   else
     {
@@ -181,7 +179,6 @@ static void up_reset(const struct w5500_lower_s *lower, bool reset)
   struct esp32s3_lower_s *priv = (struct esp32s3_lower_s *)lower;
   
   /* Take W5500 out of reset (active low) */
-
   esp32s3_gpiowrite(priv->reset_pin, !reset);
 }
 
@@ -192,18 +189,23 @@ static void up_reset(const struct w5500_lower_s *lower, bool reset)
 void esp32s3_spi2_select(struct spi_dev_s *dev, uint32_t devid,
                          bool selected)
 {
-  switch(devid)
+  uint16_t dev_type = SPIDEVID_TYPE(devid);
+  uint16_t dev_index = SPIDEVID_INDEX(devid);
+  if(SPIDEVTYPE_ETHERNET == dev_type)
   {
-    case W5500_DEVNO_1:
-      esp32s3_gpiowrite(g_enclower1.cs_pin, !selected);
-      break;
-    case W5500_DEVNO_2:
-      esp32s3_gpiowrite(g_enclower2.cs_pin, !selected);
-      break;
-    default:
-      break;
+    switch(dev_index)
+    {
+      case W5500_DEVNO_1:
+        esp32s3_gpiowrite(g_enclower1.cs_pin, !selected);
+        break;
+      case W5500_DEVNO_2:
+        esp32s3_gpiowrite(g_enclower2.cs_pin, !selected);
+        break;
+      default:
+        syslog(LOG_INFO, "unknown dev %u", devid);
+        break;
+    }
   }
-  
 }
 
 void esp_gw_eth_init(void)
@@ -213,31 +215,35 @@ void esp_gw_eth_init(void)
 
   /* Configure the interrupt pin for device 1 */
 
-  esp32s3_configgpio(GPIO_W5500_1_INTR, INPUT_FUNCTION_1 | PULLUP);
+  esp32s3_configgpio(GPIO_W5500_1_INTR, INPUT_PULLUP);
 
   /* Configure the reset pin as output for device 1 */
 
-  esp32s3_gpio_matrix_out(GPIO_W5500_1_RESET, SIG_GPIO_OUT_IDX, 0, 0);
-  esp32s3_configgpio(GPIO_W5500_1_RESET, OUTPUT_FUNCTION_1 | INPUT_FUNCTION_1);
+  esp32s3_configgpio(GPIO_W5500_1_RESET, OUTPUT_FUNCTION);
+  
+  esp32s3_gpiowrite(GPIO_W5500_1_RESET, false);
 
   /* Configure the CS pin as output for device 1 */
 
-  esp32s3_configgpio(GPIO_W5500_1_CS, OUTPUT_FUNCTION_1 | INPUT_FUNCTION_1);
-  esp32s3_gpio_matrix_out(GPIO_W5500_1_CS, SIG_GPIO_OUT_IDX, 0, 0);
+  esp32s3_configgpio(GPIO_W5500_1_CS, OUTPUT_FUNCTION);
+  
+  esp32s3_gpiowrite(GPIO_W5500_1_CS, true);
 
   /* Configure the interrupt pin for device 2 */
 
-  esp32s3_configgpio(GPIO_W5500_2_INTR, INPUT_FUNCTION_1 | PULLUP);
+  esp32s3_configgpio(GPIO_W5500_2_INTR, INPUT_PULLUP);
 
   /* Configure the reset pin as output for device 2 */
 
-  esp32s3_gpio_matrix_out(GPIO_W5500_2_RESET, SIG_GPIO_OUT_IDX, 0, 0);
-  esp32s3_configgpio(GPIO_W5500_2_RESET, OUTPUT_FUNCTION_1 | INPUT_FUNCTION_1);
+  esp32s3_configgpio(GPIO_W5500_2_RESET, OUTPUT_FUNCTION);
+  
+  esp32s3_gpiowrite(GPIO_W5500_2_RESET, false);
 
   /* Configure the CS pin as output for device 2 */
 
-  esp32s3_configgpio(GPIO_W5500_2_CS, OUTPUT_FUNCTION_1 | INPUT_FUNCTION_1);
-  esp32s3_gpio_matrix_out(GPIO_W5500_2_CS, SIG_GPIO_OUT_IDX, 0, 0);
+  esp32s3_configgpio(GPIO_W5500_2_CS, OUTPUT_FUNCTION);
+  
+  esp32s3_gpiowrite(GPIO_W5500_2_CS, true);
 
   /* Assumptions:
    * 1) W5500 pins were configured in up_spi.c early in the boot-up phase.
@@ -264,7 +270,7 @@ void esp_gw_eth_init(void)
 
   ninfo("Bound SPI port %d to W5500 device %d\n",
         W5500_SPI_PORTNO, W5500_DEVNO_1);
-
+#if 1
   /* Bind the SPI port to the second W5500 driver */
   //spi
   ret = w5500_initialize(spi, &g_enclower2.lower, W5500_DEVNO_2);
@@ -277,4 +283,5 @@ void esp_gw_eth_init(void)
 
   ninfo("Bound SPI port %d to W5500 device %d\n",
         W5500_SPI_PORTNO, W5500_DEVNO_2);
+#endif
 }
