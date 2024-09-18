@@ -2059,7 +2059,7 @@ int w5500_initialize(FAR struct spi_dev_s *spi_dev,
 #ifdef CONFIG_NETDEV_IOCTL
   self->w_dev.d_ioctl   = w5500_ioctl;                    /* Handle network IOCTL commands */
 #endif
-  self->w_dev.d_private = g_w5500;                        /* Used to recover private state from dev */
+  self->w_dev.d_private = &g_w5500[devno];                /* Used to recover private state from dev */
   self->spi_dev         = spi_dev;                        /* SPI hardware interconnect */
   self->lower           = lower;                          /* Low-level MCU specific support */
 
