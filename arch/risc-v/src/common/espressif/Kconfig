@@ -465,6 +465,14 @@ config ESPRESSIF_WIFI
 	---help---
 		Enable Wi-Fi support
 
+config ESPRESSIF_BLE
+	bool "BLE"
+	depends on ESPRESSIF_ESP32C3
+	default n
+	select ESP_WIRELESS
+	---help---
+		Enable BLE support
+
 config ESP_COEX_SW_COEXIST_ENABLE
 	bool "Software WiFi/Bluetooth/IEEE 802.15.4 coexistence"
 	depends on (ESPRESSIF_WIFI && ESPRESSIF_BLE) || \
@@ -477,6 +485,13 @@ config ESP_COEX_SW_COEXIST_ENABLE
 		automatically managed, no user intervention is required.
 		If only Bluetooth is used, it is recommended to disable this option to reduce binary file
 		size.
+
+menuconfig ESPRESSIF_WIFI_BT_COEXIST
+	bool "Wi-Fi and BT coexist"
+	default y if ESPRESSIF_WIFI && ESPRESSIF_BLE
+	default n
+	depends on ESPRESSIF_WIFI && ESPRESSIF_BLE
+	select ESPRESSIF_WIFI_STA_DISCONNECT_PM
 
 config ESP_MCPWM
 	bool "Motor Control PWM (MCPWM)"
@@ -933,6 +948,30 @@ endchoice # ESP_POWER_SAVE_MODE
 
 endmenu # ESPRESSIF_WIFI
 
+menu "BLE Configuration"
+	depends on ESPRESSIF_BLE
+
+config ESPRESSIF_BLE_TTY_NAME
+	string "BLE TTY device name"
+	default "/dev/ttyHCI0"
+	depends on UART_BTH4
+
+config ESPRESSIF_BLE_TASK_STACK_SIZE
+	int "Controller task stack size"
+	default 4096
+
+config ESPRESSIF_BLE_TASK_PRIORITY
+	int "Controller task priority"
+	default 253
+
+config ESPRESSIF_BLE_INTERRUPT_SAVE_STATUS
+	int "Number of interrupt save status"
+	default 3
+	---help---
+		Number of interrupt save status variables to keep track. Increase it if any related bug is found.
+
+endmenu # BLE Configuration
+
 menu "UART Configuration"
 	depends on ESPRESSIF_UART
 
@@ -1199,6 +1238,19 @@ config ESPRESSIF_SPI_TEST_MODE
 		peripheral without any external connection.
 
 endmenu # SPI configuration
+
+menu "Interrupt Configuration"
+
+config ESPRESSIF_IRAM_ISR_DEBUG
+	bool "Enable debugging of the IRAM-enabled interrupts"
+	default n
+	---help---
+		This option enables keeping track of the IRAM-enabled interrupts by
+		registering its execution when non-IRAM interrupts are disabled. It
+		keeps track of the IRQ executed and register how many times since
+		boot it was executed. Generally used for testing.
+
+endmenu
 
 menu "SPI Flash Configuration"
 
@@ -1766,9 +1818,44 @@ endmenu # ESPRESSIF_BROWNOUT_DET
 menu "Internal Temperature Sensor Configuration"
 	depends on ESPRESSIF_TEMP
 
+config ESPRESSIF_TEMP_UORB
+	bool "Internal Temperature Sensor UORB Interface"
+	default n
+	---help---
+		Enables work with the UORB or Character Device interface.
+		If not set, the Character Device is used by default.
+
 config ESPRESSIF_TEMP_PATH
 	string "Internal Temperature Sensor Path"
+	depends on !ESPRESSIF_TEMP_UORB
 	default "dev/temp"
+
+config ESPRESSIF_TEMP_PATH_DEVNO
+	int "Internal Temperature Sensor Path Device Number"
+	depends on ESPRESSIF_TEMP_UORB
+	default 0
+
+config ESPRESSIF_TEMP_UORB_POLL
+	bool "Enables polling sensor data"
+	depends on ESPRESSIF_TEMP_UORB
+	default n
+	---help---
+		Enables polling of sensor.
+
+config ESPRESSIF_TEMP_UORB_POLL_INTERVAL
+	int "Polling interval in microseconds, default 1 sec"
+	depends on ESPRESSIF_TEMP_UORB_POLL
+	default 1000000
+	range 0 4294967295
+	---help---
+		The interval until a new sensor measurement will be triggered.
+
+config ESPRESSIF_TEMP_THREAD_STACKSIZE
+	int "Worker thread stack size"
+	depends on ESPRESSIF_TEMP_UORB_POLL
+	default 1024
+	---help---
+		The stack size for the worker thread.
 
 endmenu # ESPRESSIF_TEMP
 

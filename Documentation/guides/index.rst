@@ -19,6 +19,7 @@ Guides
   customapps.rst
   citests.rst
   zerolatencyinterrupts.rst
+  kasan.rst
   nestedinterrupts.rst
   cortexmhardfaults.rst
   coredump.rst
@@ -33,3 +34,13 @@ Guides
   stackrecord.rst
   etcromfs.rst
   thread_local_storage.rst
+  devicetree.rst
+  debuggingflash_nuttxonarm.rst
+  changing_systemclockconfig.rst
+  usingkernelthreads.rst
+  armv7m_runtimestackcheck.rst
+  disabling_stackdumpdebug.rst
+  include_files_board_h.rst
+  specialstuff_in_nuttxheaderfiles.rst
+  kernel_threads_with_custom_stacks.rst
+  versioning_and_task_names.rst

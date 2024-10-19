@@ -37,8 +37,13 @@
 
 void *riscv_perform_syscall(uintreg_t *regs)
 {
+  struct tcb_s **running_task = &g_running_tasks[this_cpu()];
   struct tcb_s *tcb;
-  int cpu;
+
+  if (*running_task != NULL)
+    {
+      (*running_task)->xcp.regs = regs;
+    }
 
   /* Set up the interrupt register set needed by swint() */
 
@@ -47,10 +52,11 @@ void *riscv_perform_syscall(uintreg_t *regs)
   /* Run the system call handler (swint) */
 
   riscv_swint(0, regs, NULL);
+  tcb = this_task();
 
-#ifdef CONFIG_ARCH_ADDRENV
-  if (regs != up_current_regs())
+  if ((*running_task) != tcb)
     {
+#ifdef CONFIG_ARCH_ADDRENV
       /* Make sure that the address environment for the previously
        * running task is closed down gracefully (data caches dump,
        * MMU flushed) and set up the address environment for the new
@@ -58,33 +64,16 @@ void *riscv_perform_syscall(uintreg_t *regs)
        */
 
       addrenv_switch(NULL);
-    }
 #endif
 
-  if (regs != up_current_regs())
-    {
       /* Record the new "running" task.  g_running_tasks[] is only used by
        * assertion logic for reporting crashes.
        */
 
-      cpu = this_cpu();
-      tcb = current_task(cpu);
-      g_running_tasks[cpu] = tcb;
-
-      /* Restore the cpu lock */
-
-      restore_critical_section(tcb, cpu);
-
-      /* If a context switch occurred while processing the interrupt then
-       * current_regs may have change value.  If we return any value
-       * different from the input regs, then the lower level will know
-       * that a context switch occurred during interrupt processing.
-       */
-
-      regs = up_current_regs();
+      *running_task = tcb;
     }
 
   up_set_current_regs(NULL);
 
-  return regs;
+  return tcb->xcp.regs;
 }

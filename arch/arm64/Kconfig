@@ -136,6 +136,17 @@ config ARCH_SINGLE_SECURITY_STATE
 		GIC or other ARM architecture feature will with different
 		configure
 
+config ARM64_SMP_BUSY_WAIT
+	bool "Busy wait when SMP boot"
+	default n
+	depends on SMP
+	---help---
+		Enables busy wait when SMP boot
+
+config ARM64_SMP_BUSY_WAIT_FLAG_ADDR
+	hex "Busy wait flag address"
+	depends on ARM64_SMP_BUSY_WAIT
+
 config ARCH_HAVE_EL3
 	bool
 	default n
@@ -144,6 +155,19 @@ config ARCH_HAVE_EL3
 		EL0~El2(eg. Cortex-R82). For these Processors, the code
 		runing at EL3 is not necessary and system register for EL3
 		is not accessible
+
+config ARCH_HAVE_CLUSTER_PMU
+	bool
+	default n
+	---help---
+		Some processors implement cluster PMUs, such as Cortex-R82
+
+config ARCH_CLUSTER_PMU
+	bool "Enable the cluster PMUs"
+	default n
+	depends on ARCH_HAVE_CLUSTER_PMU
+	---help---
+		If the processor supports cluster PMU, can configure cluster PMU
 
 config ARCH_ARM64_EXCEPTION_LEVEL
 	int "Exception level to operate"
@@ -242,6 +266,7 @@ config ARCH_CORTEX_R82
 	select ARCH_ICACHE
 	select ARCH_HAVE_MPU
 	select ARCH_HAVE_FPU
+	select ARCH_HAVE_CLUSTER_PMU
 	select ARCH_HAVE_TESTSET
 	select ARM64_HAVE_NEON
 
@@ -314,6 +339,34 @@ config ARM64_GIC_EOIMODE
 	---help---
 		Enable GICC_CTLR.EOImode, this will separates the priority drop and interrupt
 		deactivation operations.
+
+config ARM64_GICV2M
+	bool "gicv2m support message irq"
+	depends on PCI_MSIX
+	default n
+
+config ARM64_GICV2_LEGACY_IRQ0
+	int "pci legacy irq0 default val"
+	default 35
+	---help---
+		qemu pci legacy irq0 val, not support if val < 0
+
+endif
+
+if ARM64_GIC_VERSION = 3
+
+config ARM64_GICV3_SPI_EDGE
+	bool "Configure all SPIs(Shared Peripheral Interrupts) as edge-triggered by default"
+	default n
+	---help---
+		Configure all SPIs(Shared Peripheral Interrupts) as edge-triggered by default.
+
+config ARM64_GICV3_SPI_ROUTING_CPU0
+	bool "Configure SPI interrupt affinity routing to CPU0 by default"
+	default y if SMP
+	default n
+	---help---
+		Configure SPI interrupt affinity routing to CPU0 by default.
 
 endif
 

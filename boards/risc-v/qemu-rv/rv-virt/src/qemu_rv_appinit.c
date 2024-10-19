@@ -41,6 +41,7 @@
 #include "qemu_rv_rptun.h"
 
 #include "riscv_internal.h"
+#include "riscv_sbi.h"
 #include "romfs.h"
 
 #ifdef CONFIG_USERLED
@@ -129,7 +130,7 @@ int board_app_initialize(uintptr_t arg)
 #endif
 
 #ifdef CONFIG_FS_TMPFS
-  mount(NULL, "/tmp", "tmpfs", 0, NULL);
+  mount(NULL, CONFIG_LIBC_TMPDIR, "tmpfs", 0, NULL);
 #endif
 
 #endif

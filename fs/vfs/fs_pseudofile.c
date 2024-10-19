@@ -314,29 +314,23 @@ static int pseudofile_mmap(FAR struct file *filep,
 {
   FAR struct inode *node = filep->f_inode;
   FAR struct fs_pseudofile_s *pf = node->i_private;
+  int ret = -EINVAL;
 
   /* Keep the inode when mmapped, increase refcount */
 
-  int ret = inode_addref(node);
-  if (ret >= 0)
+  inode_addref(node);
+  if (map->offset >= 0 && map->offset < node->i_size &&
+      map->length != 0 && map->offset + map->length <= node->i_size)
     {
-      if (map->offset >= 0 && map->offset < node->i_size &&
-          map->length != 0 && map->offset + map->length <= node->i_size)
-        {
-          map->vaddr = pf->content + map->offset;
-          map->munmap = pseudofile_munmap;
-          map->priv.p = (FAR void *)node;
-          ret = mm_map_add(get_current_mm(), map);
-        }
-      else
-        {
-          ret = -EINVAL;
-        }
+      map->vaddr = pf->content + map->offset;
+      map->munmap = pseudofile_munmap;
+      map->priv.p = (FAR void *)node;
+      ret = mm_map_add(get_current_mm(), map);
+    }
 
-      if (ret < 0)
-        {
-          inode_release(node);
-        }
+  if (ret < 0)
+    {
+      inode_release(node);
     }
 
   return ret;
@@ -348,29 +342,24 @@ static int pseudofile_munmap(FAR struct task_group_s *group,
                              size_t length)
 {
   FAR struct inode *inode = (FAR struct inode *)map->priv.p;
+  int ret = OK;
 
   /* If the file has been unlinked previously, delete the contents.
    * The inode is released after this call, hence checking if i_crefs <= 1.
    */
 
-  int ret = inode_lock();
-  if (ret >= 0)
+  if (inode->i_parent == NULL &&
+      atomic_load(&inode->i_crefs) <= 1)
     {
-      if (inode->i_parent == NULL &&
-          inode->i_crefs <= 1)
+      /* Delete the inode metadata */
+
+      if (inode->i_private)
         {
-          /* Delete the inode metadata */
-
-          if (inode->i_private)
-            {
-              fs_heap_free(inode->i_private);
-            }
-
-          inode->i_private = NULL;
-          ret = OK;
+          fs_heap_free(inode->i_private);
         }
 
-      inode_unlock();
+      inode->i_private = NULL;
+      ret = OK;
     }
 
   /* Unkeep the inode when unmapped, decrease refcount */
@@ -489,19 +478,13 @@ int pseudofile_create(FAR struct inode **node, FAR const char *path,
 
   nxmutex_init(&pf->lock);
 
-  ret = inode_lock();
-  if (ret < 0)
-    {
-      goto lock_err;
-    }
-
+  inode_lock();
   ret = inode_reserve(path, mode, node);
   if (ret < 0)
     {
       goto reserve_err;
     }
 
-  (*node)->i_crefs = 0;
   (*node)->i_flags = 1;
   (*node)->u.i_ops = &g_pseudofile_ops;
   (*node)->i_private = pf;
@@ -514,7 +497,6 @@ int pseudofile_create(FAR struct inode **node, FAR const char *path,
 
 reserve_err:
   inode_unlock();
-lock_err:
   nxmutex_destroy(&pf->lock);
   fs_heap_free(pf);
   return ret;
