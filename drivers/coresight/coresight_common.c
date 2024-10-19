@@ -38,8 +38,6 @@
 #define CORESIGHT_UNLOCK               0xc5acce55
 #define CORESIGHT_LOCK                 0x0
 
-#define CORESIGHT_CLAIM_SELF_HOSTED    BIT(1)
-
 #define CORESIGHT_SOURCE_BITMAP_SIZE   32
 
 #define CORESIGHT_ETM_PMU_SEED         0x10
@@ -229,7 +227,7 @@ int coresight_get_system_trace_id(void)
       return -EINVAL;
     }
 
-  __set_bit(traceid, g_coresight_trace_id_bitmap);
+  set_bit(traceid, g_coresight_trace_id_bitmap);
   spin_unlock_irqrestore(&g_coresight_trace_id_lock, flags);
 
   return traceid;
@@ -251,7 +249,7 @@ void coresight_put_system_trace_id(int traceid)
   irqstate_t flags;
 
   flags = spin_lock_irqsave(&g_coresight_trace_id_lock);
-  __clear_bit(traceid, g_coresight_trace_id_bitmap);
+  clear_bit(traceid, g_coresight_trace_id_bitmap);
   spin_unlock_irqrestore(&g_coresight_trace_id_lock, flags);
 }
 

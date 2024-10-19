@@ -1,6 +1,8 @@
 /****************************************************************************
  * include/sys/boardctl.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -464,7 +466,8 @@ enum boardioc_softreset_subreason_e
   BOARDIOC_SOFTRESETCAUSE_ENTER_BOOTLOADER,
   BOARDIOC_SOFTRESETCAUSE_ENTER_RECOVERY,
   BOARDIOC_SOFTRESETCAUSE_RESTORE_FACTORY,
-  BOARDIOC_SOFTRESETCAUSE_RESTORE_FACTORY_INQUIRY
+  BOARDIOC_SOFTRESETCAUSE_RESTORE_FACTORY_INQUIRY,
+  BOARDIOC_SOFTRESETCAUSE_THERMAL
 };
 
 struct boardioc_reset_cause_s

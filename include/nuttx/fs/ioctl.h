@@ -1,6 +1,8 @@
 /****************************************************************************
  * include/nuttx/fs/ioctl.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -103,6 +105,7 @@
 #define _FFIOCBASE      (0x3f00) /* Force feedback ioctl commands */
 #define _PINCTRLBASE    (0x4000) /* Pinctrl driver ioctl commands */
 #define _PCIBASE        (0x4100) /* Pci ioctl commands */
+#define _I3CBASE        (0x4200) /* I3C driver ioctl commands */
 #define _WLIOCBASE      (0x8b00) /* Wireless modules ioctl network commands */
 
 /* boardctl() commands share the same number space */
@@ -224,6 +227,9 @@
                                            */
 #define FIOC_SETLKW         _FIOC(0x0014) /* IN:  Pointer to flock
                                            * OUT: None
+                                           */
+#define FIOC_XIPBASE        _FIOC(0x0015) /* IN:  uinptr_t *
+                                           * OUT: Current file xip base address
                                            */
 
 /* NuttX file system ioctl definitions **************************************/
@@ -725,6 +731,13 @@
 
 #define _PCIIOCVALID(c)   (_IOC_TYPE(c)==_PCIBASE)
 #define _PCIIOC(nr)       _IOC(_PCIBASE,nr)
+
+/* I3C driver ioctl definitions *********************************************/
+
+/* see nuttx/include/i3c/i3c_driver.h */
+
+#define _I3CIOCVALID(c)   (_IOC_TYPE(c)==_I3CBASE)
+#define _I3CIOC(nr)       _IOC(_I3CBASE,nr)
 
 /* Force Feedback driver command definitions ********************************/
 

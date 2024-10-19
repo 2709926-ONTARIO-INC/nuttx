@@ -40,6 +40,8 @@ set(CMAKE_C_ARCHIVE_FINISH ${CMAKE_RANLIB_COMMAND})
 set(CMAKE_CXX_ARCHIVE_FINISH ${CMAKE_RANLIB_COMMAND})
 set(CMAKE_ASM_ARCHIVE_FINISH ${CMAKE_RANLIB_COMMAND})
 
+set(NO_LTO "-fno-lto")
+
 if(CONFIG_DEBUG_CUSTOMOPT)
   add_compile_options(${CONFIG_DEBUG_OPTLEVEL})
 elseif(CONFIG_DEBUG_FULLOPT)
@@ -73,12 +75,12 @@ if(${CONFIG_STACK_USAGE_WARNING})
   endif()
 endif()
 
-if(CONFIG_ARCH_COVERAGE)
+if(CONFIG_SCHED_GCOV)
   add_compile_options(-fprofile-generate -ftest-coverage)
 endif()
 
 if(CONFIG_DEBUG_SYMBOLS)
-  add_compile_options(-g)
+  add_compile_options(${CONFIG_DEBUG_SYMBOLS_LEVEL})
 endif()
 
 # Architecture flags
@@ -87,8 +89,19 @@ add_link_options(-Wl,--entry=__pmode_entry)
 add_link_options(-z max-page-size=0x1000)
 add_link_options(-no-pie -nostdlib)
 add_link_options(-Wl,--no-relax)
-add_compile_options(-fPIC)
+add_compile_options(-fno-pic -mcmodel=large)
 add_compile_options(-mno-red-zone)
+
+add_compile_options(
+  -U_AIX
+  -U_WIN32
+  -U__APPLE__
+  -U__FreeBSD__
+  -U__NetBSD__
+  -U__linux__
+  -U__sun__
+  -U__unix__
+  -U__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__)
 
 if(CONFIG_DEBUG_LINK_MAP)
   add_link_options(-Wl,--cref -Wl,-Map=nuttx.map)
@@ -105,6 +118,11 @@ add_compile_options(
 
 if(CONFIG_CXX_STANDARD)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-std=${CONFIG_CXX_STANDARD}>)
+endif()
+
+if(CONFIG_LIBCXX)
+  add_compile_options(-D__GLIBCXX__)
+  add_compile_options(-D_LIBCPP_DISABLE_AVAILABILITY)
 endif()
 
 if(NOT CONFIG_LIBCXXTOOLCHAIN)

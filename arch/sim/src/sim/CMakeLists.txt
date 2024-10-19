@@ -27,7 +27,7 @@ set(HOSTSRCS)
 set(HOST_INCLUDE_DIRS)
 set(STDLIBS pthread)
 
-if(CONFIG_ARCH_COVERAGE)
+if(CONFIG_SCHED_GCOV)
   list(APPEND STDLIBS gcov)
 endif()
 
@@ -57,7 +57,7 @@ list(
   sim_registerdump.c
   sim_saveusercontext.c
   sim_tcbinfo.c
-  sim_textheap.c
+  sim_sectionheap.c
   sim_checkhostfstypes.c)
 
 if(CONFIG_HOST_X86_64)
@@ -174,6 +174,9 @@ endif()
 
 if(CONFIG_SMP)
   list(APPEND SRCS sim_smpsignal.c sim_cpuidlestack.c)
+endif()
+
+if(CONFIG_ARCH_HAVE_MULTICPU AND NOT WIN32)
   list(APPEND HOSTSRCS sim_hostsmp.c)
 endif()
 

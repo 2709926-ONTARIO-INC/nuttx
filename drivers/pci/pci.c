@@ -28,6 +28,7 @@
 #include <sys/pciio.h>
 #include <sys/endian.h>
 
+#include <nuttx/arch.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/pci/pci.h>
 
@@ -556,6 +557,10 @@ static FAR struct pci_bus_s *pci_alloc_bus(void)
   FAR struct pci_bus_s *bus;
 
   bus = kmm_zalloc(sizeof(*bus));
+  if (bus == NULL)
+    {
+      return NULL;
+    }
 
   list_initialize(&bus->node);
   list_initialize(&bus->children);
@@ -580,6 +585,10 @@ static FAR struct pci_device_s *pci_alloc_device(void)
   FAR struct pci_device_s *dev;
 
   dev = kmm_zalloc(sizeof(*dev));
+  if (dev == NULL)
+    {
+      return NULL;
+    }
 
   list_initialize(&dev->node);
   list_initialize(&dev->bus_list);
@@ -681,6 +690,8 @@ static void pci_setup_device(FAR struct pci_device_s *dev, int max_bar,
   pci_read_config_byte(dev, PCI_COMMAND, &cmd);
   pci_write_config_byte(dev, PCI_COMMAND,
                         cmd & ~PCI_COMMAND_IO & ~PCI_COMMAND_MEMORY);
+#else
+  uint32_t tmp;
 #endif
 
   for (bar = 0; bar < max_bar; bar++)
@@ -747,15 +758,14 @@ static void pci_setup_device(FAR struct pci_device_s *dev, int max_bar,
       pci_write_config_dword(dev, base_address_0, res->start);
       if (mask & PCI_BASE_ADDRESS_MEM_TYPE_64)
         {
-          pci_write_config_dword(dev, base_address_1, res->start >> 32);
+          pci_write_config_dword(dev, base_address_1,
+                                 (uint64_t)res->start >> 32);
         }
 
       start = res->start;
       res->start += size;
 #else
       UNUSED(res);
-      uint32_t tmp;
-
       pci_read_config_dword(dev, base_address_0, &tmp);
       if (mask & PCI_BASE_ADDRESS_SPACE_IO)
         {
@@ -856,7 +866,7 @@ static void pci_presetup_bridge(FAR struct pci_device_s *dev)
       pci_write_config_word(dev, PCI_PREF_MEMORY_BASE,
                             (ctrl->mem_pref.start & 0xfff00000) >> 16);
       pci_write_config_dword(dev, PCI_PREF_BASE_UPPER32,
-                             ctrl->mem_pref.start >> 32);
+                             (uint64_t)ctrl->mem_pref.start >> 32);
       cmdstat |= PCI_COMMAND_MEMORY;
     }
   else
@@ -920,7 +930,7 @@ static void pci_postsetup_bridge(FAR struct pci_device_s *dev)
       pci_write_config_word(dev, PCI_PREF_MEMORY_LIMIT,
                             ((ctrl->mem_pref.start - 1) & 0xfff00000) >> 16);
       pci_write_config_dword(dev, PCI_PREF_LIMIT_UPPER32,
-                             (ctrl->mem_pref.start - 1) >> 32);
+                             (uint64_t)(ctrl->mem_pref.start - 1) >> 32);
     }
 
   if (pci_resource_size(&ctrl->io))
@@ -951,7 +961,7 @@ static void pci_scan_bus(FAR struct pci_bus_s *bus)
 {
   FAR struct pci_device_s *dev;
   FAR struct pci_bus_s *child_bus;
-  uint32_t devfn;
+  unsigned int devfn;
   uint32_t l;
   uint32_t class;
   uint8_t hdr_type;
@@ -1032,7 +1042,7 @@ static void pci_scan_bus(FAR struct pci_bus_s *bus)
           child_bus->parent_bus = bus;
 
 #ifdef CONFIG_PCI_ASSIGN_ALL_BUSES
-          child_bus->number = ctrl->busno++;
+          child_bus->number = bus->ctrl->busno++;
 #endif
 
           list_add_tail(&bus->children, &child_bus->node);
@@ -1127,7 +1137,7 @@ static int pci_enable_msi(FAR struct pci_device_s *dev, FAR int *irq,
     {
       mme = mmc;
       num = 1 << mme;
-      pciinfo("Limit MME to %x, num to %d\n", mmc, num);
+      pciinfo("Limit MME to %"PRIx32", num to %d\n", mmc, num);
     }
 
   /* Configure MSI (arch-specific) */
@@ -1146,7 +1156,8 @@ static int pci_enable_msi(FAR struct pci_device_s *dev, FAR int *irq,
 
   if ((flags & PCI_MSI_FLAGS_64BIT) != 0)
     {
-      pci_write_config_dword(dev, msi + PCI_MSI_ADDRESS_HI, (mar >> 32));
+      pci_write_config_dword(dev, msi + PCI_MSI_ADDRESS_HI,
+                             ((uint64_t)mar >> 32));
       pci_write_config_dword(dev, msi + PCI_MSI_DATA_64, mdr);
     }
   else
@@ -1188,8 +1199,74 @@ static void pci_disable_msi(FAR struct pci_device_s *dev, uint8_t msi)
 
   pci_read_config_word(dev, msi + PCI_MSI_FLAGS, &flags);
 
+  /* Write Message Address Regsiter */
+
+  pci_write_config_dword(dev, msi + PCI_MSI_ADDRESS_LO, 0);
+
+  /* Write Message Data Register */
+
+  if ((flags & PCI_MSI_FLAGS_64BIT) != 0)
+    {
+      pci_write_config_dword(dev, msi + PCI_MSI_ADDRESS_HI, 0);
+      pci_write_config_dword(dev, msi + PCI_MSI_DATA_64, 0);
+    }
+  else
+    {
+      pci_write_config_dword(dev, msi + PCI_MSI_DATA_32, 0);
+    }
+
   flags &= ~PCI_MSI_FLAGS_ENABLE;
   pci_write_config_word(dev, msi + PCI_MSI_FLAGS, flags);
+}
+
+/****************************************************************************
+ * Name: pci_disable_msix
+ *
+ * Description:
+ *  Disable MSI-X.
+ *
+ * Input Parameters:
+ *   dev  - device
+ *   msix - MSI-X base address
+ *   num  - num of msix entry
+ *
+ * Return value:
+ *   None
+ *
+ ****************************************************************************/
+
+static void pci_disable_msix(FAR struct pci_device_s *dev, uint8_t msix,
+                             int num)
+{
+  uint16_t  flags     = 0;
+  uintptr_t tbladdr   = 0;
+  uint32_t  tbloffset = 0;
+  uint32_t  tblbar    = 0;
+  uint32_t  tbl       = 0;
+  int       i         = 0;
+
+  pci_read_config_word(dev, msix + PCI_MSIX_FLAGS, &flags);
+  pci_read_config_dword(dev, msix + PCI_MSIX_TABLE, &tbl);
+
+  tblbar = tbl & PCI_MSIX_TABLE_BIR;
+  tbladdr = pci_resource_start(dev, tblbar);
+  tbloffset = tbl & PCI_MSIX_TABLE_OFFSET;
+  tbladdr += tbloffset;
+
+  for (i = 0; i < num; i++)
+    {
+      pci_write_mmio_dword(dev, tbladdr + PCI_MSIX_ENTRY_LOWER_ADDR, 0);
+      pci_write_mmio_dword(dev, tbladdr + PCI_MSIX_ENTRY_UPPER_ADDR, 0);
+      pci_write_mmio_dword(dev, tbladdr + PCI_MSIX_ENTRY_DATA, 0);
+      pci_write_mmio_dword(dev, tbladdr + PCI_MSIX_ENTRY_VECTOR_CTRL, 0);
+
+      /* Next vector */
+
+      tbladdr += PCI_MSIX_ENTRY_SIZE;
+    }
+
+  flags &= ~PCI_MSIX_FLAGS_ENABLE;
+  pci_write_config_word(dev, msix + PCI_MSIX_FLAGS, flags);
 }
 
 /****************************************************************************
@@ -1240,13 +1317,17 @@ static int pci_enable_msix(FAR struct pci_device_s *dev, FAR int *irq,
 
   tblbar = tbl & PCI_MSIX_TABLE_BIR;
   tbladdr = pci_resource_start(dev, tblbar);
-  tbloffset = (tbl & PCI_MSIX_TABLE_OFFSET) >> PCI_MSIX_TABLE_OFFSET_SHIFT;
+  tbloffset = tbl & PCI_MSIX_TABLE_OFFSET;
   tbladdr += tbloffset;
 
   /* Map MSI-X table */
 
   tblend = tbladdr + tblsize * PCI_MSIX_ENTRY_SIZE;
-  tbladdr = dev->bus->ctrl->ops->map(dev->bus, tbladdr, tblend);
+
+  if (dev->bus->ctrl->ops->map)
+    {
+      tbladdr = dev->bus->ctrl->ops->map(dev->bus, tbladdr, tblend);
+    }
 
   /* Limit tblsize */
 
@@ -1272,7 +1353,7 @@ static int pci_enable_msix(FAR struct pci_device_s *dev, FAR int *irq,
       pci_write_mmio_dword(dev, tbladdr + PCI_MSIX_ENTRY_LOWER_ADDR, mar);
 
       pci_write_mmio_dword(dev, tbladdr + PCI_MSIX_ENTRY_UPPER_ADDR,
-                           (mar >> 32));
+                           ((uint64_t)mar >> 32));
 
       /* Write Message Data Register */
 
@@ -1561,6 +1642,60 @@ int pci_select_bars(FAR struct pci_device_s *dev, unsigned int flags)
 }
 
 /****************************************************************************
+ * Name: pci_bus_map_region
+ *
+ * Description:
+ *   Create a virtual mapping for a address.
+ *
+ *   Using this function you will get an virtual address.
+ *   These functions hide the details if this is a MMIO or PIO address
+ *   space and will just do what you expect from them in the correct way.
+ *
+ * Input Parameters:
+ *   bus   - PCI bus
+ *   start - The address base
+ *   size  - The length of the address
+ *
+ * Returned Value:
+ *  Virtual address or zero if failed
+ ****************************************************************************/
+
+FAR void *
+pci_bus_map_region(FAR struct pci_bus_s *bus, uintptr_t start, size_t size)
+{
+  return bus->ctrl->ops->map ?
+    (FAR void *)bus->ctrl->ops->map(bus, start, start + size)
+    : (FAR void *)start;
+}
+
+/****************************************************************************
+ * Name: pci_map_bar_region
+ *
+ * Description:
+ *   Create a virtual mapping for a PCI BAR REGION.
+ *
+ *   Using this function you will get an address to your device BAR region.
+ *   These functions hide the details if this is a MMIO or PIO address
+ *   space and will just do what you expect from them in the correct way.
+ *
+ * Input Parameters:
+ *   dev - PCI device that owns the BAR
+ *   bar - BAR number
+ *   offset - BAR region offset
+ *   length - BAR region length
+ *
+ * Returned Value:
+ *  IO address or zero if failed
+ ****************************************************************************/
+
+FAR void *pci_map_bar_region(FAR struct pci_device_s *dev, int bar,
+                             uintptr_t offset, size_t length)
+{
+  uintptr_t start = pci_resource_start(dev, bar) + offset;
+  return pci_map_region(dev, start, length);
+}
+
+/****************************************************************************
  * Name: pci_map_bar
  *
  * Description:
@@ -1581,16 +1716,7 @@ int pci_select_bars(FAR struct pci_device_s *dev, unsigned int flags)
 
 FAR void *pci_map_bar(FAR struct pci_device_s *dev, int bar)
 {
-  FAR struct pci_bus_s *bus = dev->bus;
-  uintptr_t start = pci_resource_start(dev, bar);
-  uintptr_t end = pci_resource_end(dev, bar);
-
-  if (bus->ctrl->ops->map)
-    {
-      start = bus->ctrl->ops->map(bus, start, end);
-    }
-
-  return (FAR void *)start;
+  return pci_map_bar_region(dev, bar, 0, pci_resource_len(dev, bar));
 }
 
 /****************************************************************************
@@ -1695,9 +1821,17 @@ bool pci_stat_line(FAR struct pci_device_s *dev)
 int pci_get_irq(FAR struct pci_device_s *dev)
 {
   uint8_t line = 0;
+  uint8_t pin = 0;
 
   pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &line);
-  return dev->bus->ctrl->ops->get_irq(dev->bus, line);
+  pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
+
+  if (dev->bus->ctrl->ops->get_irq)
+    {
+      return dev->bus->ctrl->ops->get_irq(dev->bus, dev->devfn, line, pin);
+    }
+
+  return -ENOTSUP;
 }
 
 /****************************************************************************
@@ -1719,7 +1853,12 @@ int pci_get_irq(FAR struct pci_device_s *dev)
 
 int pci_alloc_irq(FAR struct pci_device_s *dev, FAR int *irq, int num)
 {
-  return dev->bus->ctrl->ops->alloc_irq(dev->bus, irq, num);
+  if (dev->bus->ctrl->ops->alloc_irq)
+    {
+      return dev->bus->ctrl->ops->alloc_irq(dev->bus, dev->devfn, irq, num);
+    }
+
+  return -ENOTSUP;
 }
 
 /****************************************************************************
@@ -1740,7 +1879,26 @@ int pci_alloc_irq(FAR struct pci_device_s *dev, FAR int *irq, int num)
 
 void pci_release_irq(FAR struct pci_device_s *dev, FAR int *irq, int num)
 {
-  dev->bus->ctrl->ops->release_irq(dev->bus, irq, num);
+#ifdef CONFIG_PCI_MSIX
+  uint8_t msi = 0;
+  uint8_t msix = 0;
+
+  pci_get_msi_base(dev, &msi, &msix);
+  if (msi)
+    {
+       pci_disable_msi(dev, msi);
+    }
+
+  if (msix)
+    {
+       pci_disable_msix(dev, msix, num);
+    }
+#endif
+
+  if (dev->bus->ctrl->ops->release_irq)
+    {
+      dev->bus->ctrl->ops->release_irq(dev->bus, irq, num);
+    }
 }
 
 /****************************************************************************
@@ -1764,6 +1922,11 @@ int pci_connect_irq(FAR struct pci_device_s *dev, FAR int *irq, int num)
   uint8_t msi = 0;
   uint8_t msix = 0;
 
+  if (dev->bus->ctrl->ops->connect_irq == NULL)
+    {
+      return -ENOTSUP;
+    }
+
   /* Get MSI base */
 
   pci_get_msi_base(dev, &msi, &msix);
@@ -1781,7 +1944,10 @@ int pci_connect_irq(FAR struct pci_device_s *dev, FAR int *irq, int num)
     {
       /* Disalbe MSI */
 
-      pci_disable_msi(dev, msi);
+      if (msi != 0)
+        {
+          pci_disable_msi(dev, msi);
+        }
 
       /* Enable MSI-X */
 
@@ -1932,12 +2098,13 @@ int pci_register_device(FAR struct pci_device_s *dev)
               if (drv->probe(dev) >= 0)
                 {
                   dev->drv = drv;
-                  break;
+                  goto out;
                 }
             }
         }
     }
 
+out:
   nxmutex_unlock(&g_pci_lock);
   return ret;
 }
@@ -1999,6 +2166,11 @@ int pci_register_controller(FAR struct pci_controller_s *ctrl)
     }
 
   bus = pci_alloc_bus();
+  if (bus == NULL)
+    {
+      return -ENOMEM;
+    }
+
   bus->ctrl = ctrl;
 
   ctrl->bus = bus;

@@ -254,10 +254,12 @@ void arm64_gic_irq_enable(unsigned int intid)
    * SPI's affinity, now set it to be the PE on which it is enabled.
    */
 
+#ifndef CONFIG_ARM64_GICV3_SPI_ROUTING_CPU0
   if (GIC_IS_SPI(intid))
     {
       arm64_gic_write_irouter((GET_MPIDR() & MPIDR_ID_MASK), intid);
     }
+#endif
 
   putreg32(mask, ISENABLER(GET_DIST_BASE(intid), idx));
 }
@@ -408,7 +410,7 @@ static int arm64_gic_send_sgi(unsigned int sgi_id, uint64_t target_aff,
   return 0;
 }
 
-int arm64_gic_raise_sgi(unsigned int sgi_id, uint16_t target_list)
+void arm64_gic_raise_sgi(unsigned int sgi_id, uint16_t target_list)
 {
   uint64_t pre_cluster_id = UINT64_MAX;
   uint64_t curr_cluster_id;
@@ -437,8 +439,6 @@ int arm64_gic_raise_sgi(unsigned int sgi_id, uint16_t target_list)
     }
 
   arm64_gic_send_sgi(sgi_id, pre_cluster_id, tlist);
-
-  return 0;
 }
 
 /* Wake up GIC redistributor.
@@ -482,10 +482,6 @@ static void gicv3_cpuif_init(void)
   /* Any sgi/ppi intid ie. 0-31 will select GICR_CTRL */
 
   gic_wait_rwp(0);
-
-  /* Clear pending */
-
-  putreg32(BIT64_MASK(GIC_NUM_INTR_PER_REG), ICPENDR(base, 0));
 
   /* Configure all SGIs/PPIs as G1S or G1NS depending on Zephyr
    * is run in EL1S or EL1NS respectively.
@@ -613,8 +609,27 @@ static void gicv3_dist_init(void)
        intid += GIC_NUM_CFG_PER_REG)
     {
       idx = intid / GIC_NUM_CFG_PER_REG;
+#ifdef CONFIG_ARM64_GICV3_SPI_EDGE
+      /* Configure all SPIs as edge-triggered by default */
+
+      putreg32(0xaaaaaaaa, ICFGR(base, idx));
+#else
+      /* Configure all SPIs as level-sensitive by default */
+
       putreg32(0, ICFGR(base, idx));
+#endif
     }
+
+  /* Configure SPI interrupt affinity routing to CPU0 */
+
+#ifdef CONFIG_ARM64_GICV3_SPI_ROUTING_CPU0
+  uint64_t mpid = arm64_get_mpid(0);
+
+  for (intid = GIC_SPI_INT_BASE; intid < num_ints; intid++)
+    {
+      putreg64(mpid, IROUTER(base, intid));
+    }
+#endif
 
   /* TODO: Some arrch64 Cortex-A core maybe without security state
    * it has different GIC configure with standard arrch64 A or R core
@@ -655,9 +670,8 @@ static void gicv3_dist_init(void)
 #ifdef CONFIG_SMP
   /* Attach SGI interrupt handlers. This attaches the handler to all CPUs. */
 
-  DEBUGVERIFY(irq_attach(GIC_SMP_CPUPAUSE, arm64_pause_handler, NULL));
-  DEBUGVERIFY(irq_attach(GIC_SMP_CPUCALL,
-                         nxsched_smp_call_handler, NULL));
+  DEBUGVERIFY(irq_attach(GIC_SMP_SCHED, arm64_smp_sched_handler, NULL));
+  DEBUGVERIFY(irq_attach(GIC_SMP_CALL, nxsched_smp_call_handler, NULL));
 #endif
 }
 
@@ -938,8 +952,7 @@ static void arm64_gic_init(void)
   int       err;
 
   cpu               = this_cpu();
-  g_gic_rdists[cpu] = CONFIG_GICR_BASE +
-                      up_cpu_index() * CONFIG_GICR_OFFSET;
+  g_gic_rdists[cpu] = CONFIG_GICR_BASE + cpu * CONFIG_GICR_OFFSET;
 
   err = gic_validate_redist_version();
   if (err)
@@ -953,8 +966,8 @@ static void arm64_gic_init(void)
   gicv3_cpuif_init();
 
 #ifdef CONFIG_SMP
-  up_enable_irq(GIC_SMP_CPUPAUSE);
-  up_enable_irq(GIC_SMP_CPUCALL);
+  up_enable_irq(GIC_SMP_SCHED);
+  up_enable_irq(GIC_SMP_CALL);
 #endif
 }
 
@@ -981,25 +994,17 @@ void arm64_gic_secondary_init(void)
 {
   arm64_gic_init();
 }
+#endif
 
-#  ifdef CONFIG_SMP
 /***************************************************************************
- * Name: up_send_smp_call
+ * Name: up_get_legacy_irq
  *
  * Description:
- *   Send smp call to target cpu.
- *
- * Input Parameters:
- *   cpuset - The set of CPUs to receive the SGI.
- *
- * Returned Value:
- *   None.
+ *   Reserve vector for legacy
  *
  ***************************************************************************/
 
-void up_send_smp_call(cpu_set_t cpuset)
+int up_get_legacy_irq(uint32_t devfn, uint8_t line, uint8_t pin)
 {
-  up_trigger_irq(GIC_SMP_CPUCALL, cpuset);
+  return -ENOTSUP;
 }
-#  endif
-#endif

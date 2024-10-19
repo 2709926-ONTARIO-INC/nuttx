@@ -1,6 +1,8 @@
 /****************************************************************************
  * include/nuttx/pci/pci_ivshmem.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -113,6 +115,16 @@ int ivshmem_detach_irq(FAR struct ivshmem_device_s *dev);
  ****************************************************************************/
 
 int ivshmem_control_irq(FAR struct ivshmem_device_s *dev, bool on);
+
+/****************************************************************************
+ * Name: ivshmem_support_irq
+ *
+ * Description:
+ *   judge if support ivshmem interrupt
+ *
+ ****************************************************************************/
+
+bool ivshmem_support_irq(FAR struct ivshmem_device_s *dev);
 
 /****************************************************************************
  * Name: ivshmem_kick_peer

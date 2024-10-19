@@ -1,8 +1,9 @@
 /****************************************************************************
  * include/nuttx/wireless/ieee80211/ieee80211.h
- * 802.11 protocol definitions.
  *
- * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
+ * SPDX-License-Identifier: BSD-2-Clause
+ * SPDX-FileCopyrightText: 2002, 2003 Sam Leffler, Errno Consulting
+ *
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -2539,7 +2540,7 @@ ieee80211_he_ppe_size(uint8_t ppe_thres_hdr, FAR const uint8_t *phy_cap_info)
    */
 
   n = (n * IEEE80211_PPE_THRES_INFO_PPET_SIZE * 2) + 7;
-  n = DIV_ROUND_UP(n, 8);
+  n = div_round_up(n, 8);
 
   return n;
 }

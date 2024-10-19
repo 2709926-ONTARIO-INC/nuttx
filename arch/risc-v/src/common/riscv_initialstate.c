@@ -97,7 +97,7 @@ void up_initial_state(struct tcb_s *tcb)
 
   if (tcb->pid == IDLE_PROCESS_ID)
     {
-      tcb->stack_alloc_ptr = (void *)g_cpux_idlestack(riscv_mhartid());
+      tcb->stack_alloc_ptr = (void *)g_cpux_idlestack(this_cpu());
       tcb->stack_base_ptr  = tcb->stack_alloc_ptr;
       tcb->adj_stack_size  = SMP_STACK_SIZE;
 
@@ -168,5 +168,9 @@ void up_initial_state(struct tcb_s *tcb)
 
 #ifdef CONFIG_ARCH_RISCV_INTXCPT_EXTENSIONS
   riscv_initial_extctx_state(tcb);
+#endif
+
+#ifndef CONFIG_BUILD_FLAT
+  tcb->xcp.initregs = tcb->xcp.regs;
 #endif
 }
