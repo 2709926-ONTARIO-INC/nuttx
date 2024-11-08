@@ -42,12 +42,6 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Configuration ************************************************************/
-
-#ifndef CONFIG_SEM_PREALLOCHOLDERS
-#  define CONFIG_SEM_PREALLOCHOLDERS 0
-#endif
-
 /****************************************************************************
  * Private Type Declarations
  ****************************************************************************/
@@ -886,7 +880,7 @@ void nxsem_canceled(FAR struct tcb_s *stcb, FAR sem_t *sem)
 {
   /* Check our assumptions */
 
-  DEBUGASSERT(sem->semcount <= 0);
+  DEBUGASSERT(atomic_load(NXSEM_COUNT(sem)) <= 0);
 
   /* Adjust the priority of every holder as necessary */
 
@@ -984,7 +978,7 @@ void nxsem_release_all(FAR struct tcb_s *htcb)
        * that was taken by sem_wait() or sem_post().
        */
 
-      sem->semcount++;
+      atomic_fetch_add(NXSEM_COUNT(sem), 1);
     }
 }
 

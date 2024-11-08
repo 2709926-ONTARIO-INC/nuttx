@@ -27,11 +27,6 @@ if(WIN32)
   return()
 endif()
 
-find_program(CMAKE_C_COMPILER gcc)
-find_program(CMAKE_CXX_COMPILER g++)
-
-set(CMAKE_PREPROCESSOR cc -E -P -x c)
-
 # NuttX is sometimes built as a native target. In that case, the __NuttX__ macro
 # is predefined by the compiler. https://github.com/NuttX/buildroot
 #
@@ -43,16 +38,19 @@ set(CMAKE_PREPROCESSOR cc -E -P -x c)
 # macOS is built with __APPLE__. We #undef predefined macros for those possible
 # host OSes here because the OS APIs this library should use are of NuttX, not
 # the host OS.
-add_compile_options(
-  -U_AIX
-  -U_WIN32
-  -U__APPLE__
-  -U__FreeBSD__
-  -U__NetBSD__
-  -U__linux__
-  -U__sun__
-  -U__unix__
-  -U__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__)
+
+set(SIM_NO_HOST_OPTIONS
+    -U_AIX
+    -U_WIN32
+    -U__APPLE__
+    -U__FreeBSD__
+    -U__NetBSD__
+    -U__linux__
+    -U__sun__
+    -U__unix__
+    -U__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__)
+
+add_compile_options(${SIM_NO_HOST_OPTIONS})
 
 set(NO_LTO "-fno-lto")
 
@@ -88,8 +86,12 @@ if(CONFIG_STACK_USAGE_WARNING)
   add_compile_options(-Wstack-usage=${CONFIG_STACK_USAGE_WARNING})
 endif()
 
-if(CONFIG_SCHED_GCOV)
+if(CONFIG_SCHED_GCOV_ALL)
   add_compile_options(-fprofile-generate -ftest-coverage)
+endif()
+
+if(CONFIG_SCHED_GPROF_ALL OR CONFIG_SIM_GPROF)
+  add_compile_options(-pg)
 endif()
 
 if(CONFIG_SIM_ASAN)
@@ -190,5 +192,6 @@ endif()
 if(APPLE)
   add_link_options(-Wl,-dead_strip)
 else()
+  add_link_options(-Wl,--gc-sections)
   add_link_options(-Wl,-Ttext-segment=0x40000000)
 endif()

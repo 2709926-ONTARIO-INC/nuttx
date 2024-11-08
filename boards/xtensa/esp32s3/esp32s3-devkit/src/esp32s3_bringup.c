@@ -107,6 +107,9 @@
 #ifdef CONFIG_ESP32S3_SPI
 #include "esp32s3_spi.h"
 #include "esp32s3_board_spidev.h"
+#  ifdef CONFIG_ESPRESSIF_SPI_BITBANG
+#    include "espressif/esp_spi_bitbang.h"
+#  endif
 #endif
 
 #ifdef CONFIG_ESP32S3_SDMMC
@@ -126,9 +129,6 @@
 #endif
 
 #include "esp32s3-devkit.h"
-#ifdef CONFIG_NET_W5500
-extern void esp_gw_eth_init(void);
-#endif
 
 /****************************************************************************
  * Public Functions
@@ -166,7 +166,6 @@ int esp32s3_bringup(void)
     }
 #endif
 
-#if 0
 #if defined(CONFIG_ESP32S3_SPI) && defined(CONFIG_SPI_DRIVER)
   #ifdef CONFIG_ESP32S3_SPI2
   ret = board_spidev_initialize(ESP32S3_SPI2);
@@ -183,8 +182,15 @@ int esp32s3_bringup(void)
       syslog(LOG_ERR, "ERROR: Failed to init spidev 3: %d\n", ret);
     }
   #endif
-#endif
-#endif
+
+  #ifdef CONFIG_ESPRESSIF_SPI_BITBANG
+  ret = board_spidev_initialize(ESPRESSIF_SPI_BITBANG);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to init spidev 3: %d\n", ret);
+    }
+  #endif /* CONFIG_ESPRESSIF_SPI_BITBANG */
+#endif /* CONFIG_ESP32S3_SPI && CONFIG_SPI_DRIVER*/
 
 #if defined(CONFIG_ESP32S3_EFUSE)
   ret = esp32s3_efuse_initialize("/dev/efuse");
@@ -471,10 +477,6 @@ int esp32s3_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize LCD.\n");
     }
-#endif
-
-#ifdef CONFIG_NET_W5500
-  esp_gw_eth_init();
 #endif
 
 #ifdef CONFIG_NET_LAN9250

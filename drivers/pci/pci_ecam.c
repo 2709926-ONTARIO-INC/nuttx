@@ -1,6 +1,8 @@
 /****************************************************************************
  * drivers/pci/pci_ecam.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -47,11 +49,11 @@
  ****************************************************************************/
 
 static int pci_ecam_read_config(FAR struct pci_bus_s *bus,
-                                unsigned int devfn, int where, int size,
+                                uint32_t devfn, int where, int size,
                                 FAR uint32_t *val);
 
 static int pci_ecam_write_config(FAR struct pci_bus_s *bus,
-                                 unsigned int devfn, int where, int size,
+                                 uint32_t devfn, int where, int size,
                                  uint32_t val);
 
 static int pci_ecam_read_io(FAR struct pci_bus_s *bus, uintptr_t addr,
@@ -199,7 +201,7 @@ static bool pci_ecam_addr_valid(FAR const struct pci_bus_s *bus,
  ****************************************************************************/
 
 static int pci_ecam_read_config(FAR struct pci_bus_s *bus,
-                                unsigned int devfn, int where, int size,
+                                uint32_t devfn, int where, int size,
                                 FAR uint32_t *val)
 {
   FAR void *addr;
@@ -257,7 +259,7 @@ static int pci_ecam_read_config(FAR struct pci_bus_s *bus,
  ****************************************************************************/
 
 static int pci_ecam_write_config(FAR struct pci_bus_s *bus,
-                                 unsigned int devfn, int where, int size,
+                                 uint32_t devfn, int where, int size,
                                  uint32_t val)
 {
   FAR void *addr;

@@ -57,16 +57,17 @@ set(NO_LTO "-fno-lto")
 # array subscript [0] is outside array bounds:
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105523
 
-if(CONFIG_ARCH_TOOLCHAIN_GNU)
+if(CONFIG_ARCH_TOOLCHAIN_GNU AND NOT CONFIG_ARCH_TOOLCHAIN_CLANG)
   execute_process(COMMAND ${CMAKE_C_COMPILER} --version
                   OUTPUT_VARIABLE GCC_VERSION_OUTPUT)
-  string(REGEX MATCH "\\+\\+.* ([0-9]+)\\.[0-9]+" GCC_VERSION_REGEX
+  string(REGEX MATCH "([0-9]+)\\.[0-9]+" GCC_VERSION_REGEX
                "${GCC_VERSION_OUTPUT}")
   set(GCCVER ${CMAKE_MATCH_1})
 
   if(GCCVER GREATER_EQUAL 12)
+    add_link_options(-Wl,--print-memory-usage)
     add_compile_options(--param=min-pagesize=0)
-    if(CONFIG_ARCH_RAMFUNCS)
+    if(CONFIG_ARCH_RAMFUNCS OR NOT CONFIG_BOOT_RUNFROMFLASH)
       add_link_options(-Wl,--no-warn-rwx-segments)
     endif()
   endif()
@@ -126,7 +127,7 @@ if(CONFIG_STACK_USAGE_WARNING AND NOT "${CONFIG_STACK_USAGE_WARNING}" STREQUAL
   add_compile_options(-Wstack-usage=${CONFIG_STACK_USAGE_WARNING})
 endif()
 
-if(CONFIG_SCHED_GCOV)
+if(CONFIG_SCHED_GCOV_ALL)
   add_compile_options(-fprofile-generate -ftest-coverage)
 endif()
 

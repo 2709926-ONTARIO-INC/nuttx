@@ -579,12 +579,12 @@ endif()
 get_property(ldscript GLOBAL PROPERTY LD_SCRIPT)
 
 # Pre-compile linker script
-if(NOT CONFIG_ARCH_SIM)
+if(NOT CONFIG_ARCH_SIM AND NOT CONFIG_ARCH_TOOLCHAIN_TASKING)
   get_filename_component(LD_SCRIPT_NAME ${ldscript} NAME)
   set(LD_SCRIPT_TMP "${CMAKE_BINARY_DIR}/${LD_SCRIPT_NAME}.tmp")
 
-  nuttx_generate_preproces_target(SOURCE_FILE ${ldscript} TARGET_FILE
-                                  ${LD_SCRIPT_TMP})
+  nuttx_generate_preprocess_target(SOURCE_FILE ${ldscript} TARGET_FILE
+                                   ${LD_SCRIPT_TMP})
 
   add_custom_target(ldscript_tmp DEPENDS ${LD_SCRIPT_TMP})
   add_dependencies(nuttx ldscript_tmp)
@@ -623,6 +623,8 @@ if(NOT CONFIG_ARCH_SIM)
   # TODO: nostart/nodefault not applicable to nuttx toolchain
   if(CONFIG_ARCH_TOOLCHAIN_TASKING)
     target_link_libraries(nuttx PRIVATE --lsl-file=${ldscript} ${nuttx_libs})
+    # Remove executable suffix
+    set(CMAKE_EXECUTABLE_SUFFIX "")
   else()
     target_link_libraries(
       nuttx
@@ -761,8 +763,8 @@ if(CONFIG_BUILD_PROTECTED)
   # Pre-compile linker script
   get_filename_component(LD_SCRIPT_USER_NAME ${user_ldscript} NAME)
   set(LD_SCRIPT_USER_TMP "${CMAKE_BINARY_DIR}/${LD_SCRIPT_USER_NAME}.tmp")
-  nuttx_generate_preproces_target(SOURCE_FILE ${user_ldscript} TARGET_FILE
-                                  ${LD_SCRIPT_USER_TMP})
+  nuttx_generate_preprocess_target(SOURCE_FILE ${user_ldscript} TARGET_FILE
+                                   ${LD_SCRIPT_USER_TMP})
   add_custom_target(user_ldscript_tmp DEPENDS ${LD_SCRIPT_USER_TMP})
   add_dependencies(nuttx_user user_ldscript_tmp)
   set(user_ldscript ${LD_SCRIPT_USER_TMP})

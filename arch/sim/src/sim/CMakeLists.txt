@@ -182,11 +182,14 @@ endif()
 
 if(CONFIG_SIM_X11FB)
   list(APPEND HOSTSRCS sim_x11framebuffer.c)
-
-  find_package(X11 REQUIRED)
-  if(X11_FOUND)
-    target_include_directories(nuttx PRIVATE ${X11_INCLUDE_DIR})
-    target_link_libraries(nuttx PRIVATE ${X11_LIBRARIES})
+  if(APPLE)
+    find_package(X11 REQUIRED)
+    if(X11_FOUND)
+      target_include_directories(nuttx PRIVATE ${X11_INCLUDE_DIR})
+      target_link_libraries(nuttx PRIVATE ${X11_LIBRARIES})
+    endif()
+  else()
+    list(APPEND STDLIBS X11 Xext)
   endif()
 
   if(CONFIG_SIM_TOUCHSCREEN)
@@ -288,4 +291,14 @@ endforeach()
 set(HOSTSRCS ${WINHOSTSRCS})
 
 target_sources(nuttx PRIVATE ${HOSTSRCS})
+
+get_target_property(HOST_COMPILE_OPTIONS nuttx COMPILE_OPTIONS)
+if(HOST_COMPILE_OPTIONS)
+  foreach(remove_item IN LISTS SIM_NO_HOST_OPTIONS)
+    list(REMOVE_ITEM HOST_COMPILE_OPTIONS ${remove_item})
+  endforeach()
+  set_target_properties(nuttx PROPERTIES COMPILE_OPTIONS
+                                         "${HOST_COMPILE_OPTIONS}")
+endif()
+
 target_compile_definitions(nuttx PRIVATE ${HOST_DEFINITIONS})

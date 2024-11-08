@@ -1,6 +1,8 @@
 /****************************************************************************
  * fs/rpmsgfs/rpmsgfs.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -165,6 +167,8 @@ const struct mountpt_operations g_rpmsgfs_operations =
   NULL,                  /* mmap */
   rpmsgfs_truncate,      /* truncate */
   NULL,                  /* poll */
+  NULL,                  /* readv */
+  NULL,                  /* writev */
 
   rpmsgfs_sync,          /* sync */
   rpmsgfs_dup,           /* dup */

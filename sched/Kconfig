@@ -346,6 +346,11 @@ config IRQ_NWORKS
 	---help---
 		The max num of active irq wqueue.
 
+config IRQ_WORK_SECTION
+	string "The section where irq stack is located"
+	---help---
+		The section where irq stack is located.
+
 config IRQ_WORK_STACKSIZE
 	int "The default stack size for isr wqueue"
 	default DEFAULT_TASK_STACKSIZE
@@ -1354,6 +1359,14 @@ config SCHED_GCOV
 		significantly reduced. Before use, you need to add the
 		"-fprofile-generate -ftest-coverage" compilation parameters
 		to the file to be analyzed.
+
+config SCHED_GCOV_ALL
+	bool "Enable gcov call graph for all modules"
+	depends on SCHED_GCOV
+	default n
+	---help---
+		Enable gcov profiling for all code, it will instrument
+		all code, which will cause a large performance penalty for the code.
 
 config SCHED_GPROF
 	bool "Enable gprof profiling"

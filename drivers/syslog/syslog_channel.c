@@ -1,6 +1,8 @@
 /****************************************************************************
  * drivers/syslog/syslog_channel.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -235,10 +237,9 @@ static int syslog_default_putc(FAR syslog_channel_t *channel, int ch)
   UNUSED(channel);
 
 #  ifdef CONFIG_ARCH_LOWPUTC
-  return up_putc(ch);
-#  else
-  return ch;
+  up_putc(ch);
 #  endif
+  return ch;
 }
 
 static ssize_t syslog_default_write(FAR syslog_channel_t *channel,

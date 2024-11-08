@@ -99,6 +99,14 @@
 #endif
 
 /****************************************************************************
+ * Private Types
+ ****************************************************************************/
+
+#ifdef CONFIG_SMP
+static noreturn_function int pause_cpu_handler(FAR void *arg);
+#endif
+
+/****************************************************************************
  * Private Data
  ****************************************************************************/
 
@@ -109,6 +117,7 @@ static bool g_cpu_paused[CONFIG_SMP_NCPUS];
 static uintptr_t g_last_regs[CONFIG_SMP_NCPUS][XCPTCONTEXT_REGS]
                  aligned_data(XCPTCONTEXT_ALIGN);
 
+#ifdef CONFIG_DEBUG_ALERT
 static FAR const char * const g_policy[4] =
 {
   "FIFO", "RR", "SPORADIC"
@@ -121,6 +130,12 @@ static FAR const char * const g_ttypenames[4] =
   "Kthread",
   "Invalid"
 };
+#endif
+
+#ifdef CONFIG_SMP
+static struct smp_call_data_s g_call_data =
+SMP_CALL_INITIALIZER(pause_cpu_handler, NULL);
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -326,6 +341,7 @@ static void dump_stacks(FAR struct tcb_s *rtcb, uintptr_t sp)
 
 #endif
 
+#ifdef CONFIG_DEBUG_ALERT
 /****************************************************************************
  * Name: dump_task
  ****************************************************************************/
@@ -422,6 +438,7 @@ static void dump_task(FAR struct tcb_s *tcb, FAR void *arg)
          , args
         );
 }
+#endif
 
 /****************************************************************************
  * Name: dump_backtrace
@@ -522,7 +539,9 @@ static void dump_tasks(void)
     }
 #endif
 
+#ifdef CONFIG_DEBUG_ALERT
   nxsched_foreach(dump_task, NULL);
+#endif
 
 #ifdef CONFIG_SCHED_BACKTRACE
   nxsched_foreach(dump_backtrace, NULL);
@@ -604,7 +623,7 @@ static void pause_all_cpu(void)
   int delay = CONFIG_ASSERT_PAUSE_CPU_TIMEOUT;
 
   CPU_CLR(this_cpu(), &cpus);
-  nxsched_smp_call(cpus, pause_cpu_handler, NULL, false);
+  nxsched_smp_call_async(cpus, &g_call_data);
   g_cpu_paused[this_cpu()] = true;
 
   /* Check if all CPUs paused with timeout */

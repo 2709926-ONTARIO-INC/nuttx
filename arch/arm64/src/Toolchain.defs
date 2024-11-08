@@ -82,6 +82,14 @@ ifeq ($(CONFIG_MM_KASAN_GLOBAL),y)
   ARCHOPTIMIZATION += --param asan-globals=1
 endif
 
+ifeq ($(CONFIG_MM_KASAN_DISABLE_READS_CHECK),y)
+  ARCHOPTIMIZATION += --param asan-instrument-reads=0
+endif
+
+ifeq ($(CONFIG_MM_KASAN_DISABLE_WRITES_CHECK),y)
+  ARCHOPTIMIZATION += --param asan-instrument-writes=0
+endif
+
 # Instrumentation options
 
 ifeq ($(CONFIG_ARCH_INSTRUMENT_ALL),y)
@@ -181,11 +189,17 @@ ifeq ($(CONFIG_LTO_FULL),y)
 endif
 
 ifeq ($(CONFIG_ARCH_TOOLCHAIN_GNU),y)
-  ifeq ($(GCCVER),)
-    export GCCVER := $(shell $(CC) --version | grep gcc | sed -E "s/.* ([0-9]+\.[0-9]+).*/\1/" | cut -d'.' -f1)
+  ifeq ($(CONFIG_ARCH_TOOLCHAIN_CLANG),)
+    ifeq ($(GCCVER),)
+      export GCCVER := $(shell $(CC) --version | grep gcc | sed -E "s/.* ([0-9]+\.[0-9]+).*/\1/" | cut -d'.' -f1)
+    endif
+    ifeq ($(shell expr "$(GCCVER)" \>= 12), 1)
+      LDFLAGS += --no-warn-rwx-segments
+    endif
+
   endif
   ifeq ($(shell expr "$(GCCVER)" \>= 12), 1)
-    LDFLAGS += --no-warn-rwx-segments
+    LDFLAGS += --print-memory-usage
   endif
 endif
 
@@ -197,7 +211,7 @@ ifeq ($(CONFIG_LIBM_TOOLCHAIN),y)
   EXTRA_LIBS += $(wildcard $(shell $(CC) $(ARCHCPUFLAGS) --print-file-name=libm.a))
 endif
 
-ifeq ($(CONFIG_LIBSUPCXX),y)
+ifeq ($(CONFIG_LIBSUPCXX_TOOLCHAIN),y)
   EXTRA_LIBS += $(wildcard $(shell $(CC) $(ARCHCPUFLAGS) --print-file-name=libsupc++.a))
 endif
 
@@ -207,7 +221,7 @@ endif
 
 # Loadable module definitions
 
-CMODULEFLAGS = $(CFLAGS) -fvisibility=hidden -mlong-calls # --target1-abs
+CMODULEFLAGS = $(CFLAGS) -fvisibility=hidden # --target1-abs
 LDMODULEFLAGS = -r -T $(call CONVERT_PATH,$(TOPDIR)/libs/libc/modlib/gnu-elf.ld)
 
 # ELF module definitions

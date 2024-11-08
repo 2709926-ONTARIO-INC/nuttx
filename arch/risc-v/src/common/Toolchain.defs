@@ -209,10 +209,6 @@ ifeq ($(CONFIG_RISCV_TOOLCHAIN),GNU_RVG)
     ARCHCPUEXTFLAGS := $(ARCHCPUEXTFLAGS)v
   endif
 
-  ifeq ($(GCCVER),)
-    export GCCVER = ${shell $(CROSSDEV)gcc --version | grep gcc | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -n 1 | cut -d"." -f1 }
-  endif
-
   ifeq ($(CONFIG_ARCH_RV_ISA_ZICSR_ZIFENCEI),y)
     ifeq ($(shell expr "$(GCCVER)" \>= 12), 1)
       ARCHCPUEXTFLAGS := $(ARCHCPUEXTFLAGS)_zicsr_zifencei
@@ -382,6 +378,15 @@ else
     endif
   endif
 
+  LDFLAGS += --print-memory-usage
+endif
+
+ifeq ($(CONFIG_ARCH_TOOLCHAIN_GNU),y)
+  ifeq ($(CONFIG_ARCH_TOOLCHAIN_CLANG),)
+    ifeq ($(GCCVER),)
+      export GCCVER := $(shell $(CC) --version | grep gcc | sed -E "s/.* ([0-9]+\.[0-9]+).*/\1/" | cut -d'.' -f1)
+    endif
+  endif
 endif
 
 # Add the builtin library
@@ -401,7 +406,7 @@ ifeq ($(CONFIG_LIBM_TOOLCHAIN),y)
   EXTRA_LIBS += $(wildcard $(shell $(CC) $(ARCHCPUFLAGS) --print-file-name=libm.a))
 endif
 
-ifeq ($(CONFIG_LIBSUPCXX),y)
+ifeq ($(CONFIG_LIBSUPCXX_TOOLCHAIN),y)
   EXTRA_LIBS += $(wildcard $(shell $(CC) $(ARCHCPUFLAGS) --print-file-name=libsupc++.a))
 endif
 

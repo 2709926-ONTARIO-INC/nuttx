@@ -33,6 +33,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
+#include <nuttx/nuttx.h>
 #include <nuttx/sched.h>
 #include <nuttx/ascii.h>
 #include <nuttx/gdbstub.h>
@@ -1878,7 +1879,7 @@ int gdb_debugpoint_add(int type, FAR void *addr, size_t size,
   point.callback = callback;
   point.arg = arg;
   return nxsched_smp_call((1 << CONFIG_SMP_NCPUS) - 1,
-                          gdb_smp_debugpoint_add, &point, true);
+                          gdb_smp_debugpoint_add, &point);
 #else
   return up_debugpoint_add(type, addr, size, callback, arg);
 #endif
@@ -1897,7 +1898,7 @@ int gdb_debugpoint_remove(int type, FAR void *addr, size_t size)
   point.size = size;
 
   retrun nxsched_smp_call((1 << CONFIG_SMP_NCPUS) - 1,
-                          gdb_smp_debugpoint_remove, &point, true);
+                          gdb_smp_debugpoint_remove, &point);
 #else
   return up_debugpoint_remove(type, addr, size);
 #endif
