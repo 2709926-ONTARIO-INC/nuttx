@@ -1,18 +1,14 @@
 /****************************************************************************
  * arch/arm/src/lpc17xx_40xx/lpc17_40_i2c.c
  *
- *   Copyright (C) 2012, 2014-2016, 2019 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *
- *   Copyright (C) 2011 Li Zhuoyi. All rights reserved.
- *   Author: Li Zhuoyi <lzyy.cn@gmail.com> (Original author)
- *
- * Derived from arch/arm/src/lpc31xx/lpc31_i2c.c
- *
- *   Author: David Hewson
- *
- *   Copyright (C) 2010-2011 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
+ * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-FileCopyrightText: 2019 Gregory Nutt. All rights reserved.
+ * SPDX-FileCopyrightText: 2012, 2014-2016 Gregory Nutt. All rights reserved.
+ * SPDX-FileCopyrightText: 2011 Li Zhuoyi. All rights reserved.
+ * SPDX-FileCopyrightText: 2010-2011 Gregory Nutt. All rights reserved.
+ * SPDX-FileContributor: Gregory Nutt <gnutt@nuttx.org>
+ * SPDX-FileContributor: Li Zhuoyi <lzyy.cn@gmail.com> (Original author)
+ * SPDX-FileContributor: David Hewson
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -64,12 +60,11 @@
 #include <nuttx/semaphore.h>
 #include <nuttx/i2c/i2c_master.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
 #include "arm_internal.h"
-#include "chip.h"
 #include "hardware/lpc17_40_syscon.h"
 #include "lpc17_40_gpio.h"
 #include "lpc17_40_i2c.h"
@@ -110,6 +105,7 @@ struct lpc17_40_i2cdev_s
   uint16_t         irqid;      /* IRQ for this device */
 
   mutex_t          lock;       /* Only one thread can access at a time */
+  spinlock_t       spinlock;   /* Spinlock */
   sem_t            wait;       /* Place to wait for state machine completion */
   volatile uint8_t state;      /* State of state machine */
   struct wdog_s    timeout;    /* Watchdog to timeout when bus hung */
@@ -149,22 +145,25 @@ static int  lpc17_40_i2c_reset(struct i2c_master_s *dev);
 #ifdef CONFIG_LPC17_40_I2C0
 static struct lpc17_40_i2cdev_s g_i2c0dev =
 {
-  .lock = NXMUTEX_INITIALIZER,
-  .wait = SEM_INITIALIZER(0),
+  .lock     = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
+  .wait     = SEM_INITIALIZER(0),
 };
 #endif
 #ifdef CONFIG_LPC17_40_I2C1
 static struct lpc17_40_i2cdev_s g_i2c1dev =
 {
-  .lock = NXMUTEX_INITIALIZER,
-  .wait = SEM_INITIALIZER(0),
+  .lock     = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
+  .wait     = SEM_INITIALIZER(0),
 };
 #endif
 #ifdef CONFIG_LPC17_40_I2C2
 static struct lpc17_40_i2cdev_s g_i2c2dev =
 {
-  .lock = NXMUTEX_INITIALIZER,
-  .wait = SEM_INITIALIZER(0),
+  .lock     = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
+  .wait     = SEM_INITIALIZER(0),
 };
 #endif
 
@@ -293,10 +292,10 @@ static void lpc17_40_i2c_timeout(wdparm_t arg)
 {
   struct lpc17_40_i2cdev_s *priv = (struct lpc17_40_i2cdev_s *)arg;
 
-  irqstate_t flags = enter_critical_section();
+  irqstate_t flags = spin_lock_irqsave(&priv->spinlock);
   priv->state = 0xff;
   nxsem_post(&priv->wait);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 }
 
 /****************************************************************************
@@ -529,10 +528,7 @@ struct i2c_master_s *lpc17_40_i2cbus_initialize(int port)
 {
   struct lpc17_40_i2cdev_s *priv;
 
-  irqstate_t flags;
   uint32_t regval;
-
-  flags = enter_critical_section();
 
 #ifdef CONFIG_LPC17_40_I2C0
   if (port == 0)
@@ -623,11 +619,8 @@ struct i2c_master_s *lpc17_40_i2cbus_initialize(int port)
 #endif
     {
       i2cerr("ERROR: LPC I2C Only supports ports 0, 1 and 2\n");
-      leave_critical_section(flags);
       return NULL;
     }
-
-  leave_critical_section(flags);
 
   putreg32(I2C_CONSET_I2EN, priv->base + LPC17_40_I2C_CONSET_OFFSET);
 

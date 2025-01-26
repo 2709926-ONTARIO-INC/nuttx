@@ -1,37 +1,20 @@
 /****************************************************************************
  * arch/arm/src/stm32u5/stm32_i2c.c
- * STM32U5 I2C driver - based on STM32F7 I2C Hardware Layer - Device Driver
  *
- * Original STM32U5 I2C driver:
- *
- *   Copyright (C) 2011 Uros Platise. All rights reserved.
- *   Author: Uros Platise <uros.platise@isotel.eu>
- *   Copyright (C) 2011-2013, 2016-2018 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *   Author: John Wharington
- *   Author: Sebastien Lorquet
- *   Author: dev@ziggurat29.com
- *
- * STM32U5 I2C driver based on STM32F7 I2C driver:
- *
- *   Copyright (C) 2011 Uros Platise. All rights reserved.
- *   Author: Uros Platise <uros.platise@isotel.eu>
- *
- * With extensions and modifications for the F1, F2, and F4 by:
- *
- *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
- *   Authors: Gregory Nutt <gnutt@nuttx.org>
- *            John Wharington
- *            David Sidrane <david_s5@nscdg.com>
- *
- * Major rewrite of ISR and supporting methods, including support
- * for NACK and RELOAD by:
- *
- *   Copyright (c) 2016 Doug Vetter.  All rights reserved.
- *   Author: Doug Vetter <oss@aileronlabs.com>
- *
- * Port from STM32F7 to STM32U5:
- *   Author: Jussi Kivilinna <jussi.kivilinna@haltian.com>
+ * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-FileCopyrightText: 2024 Kyle Wilson.  All rights reserved.
+ * SPDX-FileCopyrightText: 2016-2018 Gregory Nutt. All rights reserved.
+ * SPDX-FileCopyrightText: 2016 Doug Vetter.  All rights reserved.
+ * SPDX-FileCopyrightText: 2011-2013 Gregory Nutt. All rights reserved.
+ * SPDX-FileCopyrightText: 2011 Uros Platise. All rights reserved.
+ * SPDX-FileContributor: Uros Platise <uros.platise@isotel.eu>
+ * SPDX-FileContributor: Gregory Nutt <gnutt@nuttx.org>
+ * SPDX-FileContributor: John Wharington
+ * SPDX-FileContributor: David Sidrane <david_s5@nscdg.com>
+ * SPDX-FileContributor: Doug Vetter <oss@aileronlabs.com>
+ * SPDX-FileContributor: Sebastien Lorquet
+ * SPDX-FileContributor: dev@ziggurat29.com
+ * SPDX-FileContributor: Jussi Kivilinna <jussi.kivilinna@haltian.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -272,7 +255,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/clock.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
@@ -433,6 +416,7 @@ struct stm32_i2c_priv_s
 
   int refs;                    /* Reference count */
   mutex_t lock;                /* Mutual exclusion mutex */
+  spinlock_t spinlock;         /* Spinlock */
 #ifndef CONFIG_I2C_POLLED
   sem_t sem_isr;               /* Interrupt wait semaphore */
 #endif
@@ -554,6 +538,7 @@ static struct stm32_i2c_priv_s stm32_i2c1_priv =
   .config     = &stm32_i2c1_config,
   .refs       = 0,
   .lock       = NXMUTEX_INITIALIZER,
+  .spinlock   = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr    = SEM_INITIALIZER(0),
 #endif
@@ -590,6 +575,7 @@ static struct stm32_i2c_priv_s stm32_i2c2_priv =
   .config     = &stm32_i2c2_config,
   .refs       = 0,
   .lock       = NXMUTEX_INITIALIZER,
+  .spinlock   = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr    = SEM_INITIALIZER(0),
 #endif
@@ -626,6 +612,7 @@ static struct stm32_i2c_priv_s stm32_i2c3_priv =
   .config     = &stm32_i2c3_config,
   .refs       = 0,
   .lock       = NXMUTEX_INITIALIZER,
+  .spinlock   = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr    = SEM_INITIALIZER(0),
 #endif
@@ -662,6 +649,7 @@ static struct stm32_i2c_priv_s stm32_i2c4_priv =
   .config     = &stm32_i2c4_config,
   .refs       = 0,
   .lock       = NXMUTEX_INITIALIZER,
+  .spinlock   = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr    = SEM_INITIALIZER(0),
 #endif
@@ -832,7 +820,7 @@ int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
   irqstate_t flags;
   int ret;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   /* Enable I2C interrupts */
 
@@ -849,6 +837,8 @@ int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
   priv->intstate = INTSTATE_WAITING;
   do
     {
+      spin_unlock_irqrestore(&priv->spinlock, flags);
+
       /* Wait until either the transfer is complete or the timeout expires */
 
 #ifdef CONFIG_STM32U5_I2C_DYNTIMEO
@@ -867,6 +857,8 @@ int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
 
           break;
         }
+
+      flags = spin_lock_irqsave(&priv->spinlock);
     }
 
   /* Loop until the interrupt level transfer is complete. */
@@ -881,7 +873,7 @@ int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
 
   stm32_i2c_modifyreg32(priv, STM32_I2C_CR1_OFFSET, I2C_CR1_ALLINTS, 0);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
   return ret;
 }
 #else
@@ -1989,7 +1981,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
            */
 
 #ifdef CONFIG_I2C_POLLED
-          irqstate_t state = enter_critical_section();
+          irqstate_t state = spin_lock_irqsave(&priv->spinlock);
 #endif
           /* Receive a byte */
 
@@ -2006,7 +1998,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
           priv->dcnt--;
 
 #ifdef CONFIG_I2C_POLLED
-          leave_critical_section(state);
+          spin_unlock_irqrestore(&priv->spinlock, state);
 #endif
         }
       else
@@ -2240,9 +2232,9 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
               i2cinfo("TCR: DISABLE RELOAD: NBYTES = dcnt = %i msgc = %i\n",
                       priv->dcnt, priv->msgc);
 
-              stm32_i2c_disable_reload(priv);
-
               stm32_i2c_set_bytes_to_transfer(priv, priv->dcnt);
+
+              stm32_i2c_disable_reload(priv);
             }
 
           i2cinfo("TCR: EXIT dcnt = %i msgc = %i status 0x%08" PRIx32 "\n",

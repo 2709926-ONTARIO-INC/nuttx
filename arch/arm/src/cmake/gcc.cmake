@@ -1,6 +1,8 @@
 # ##############################################################################
 # arch/arm/src/cmake/gcc.cmake
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
 # additional information regarding copyright ownership.  The ASF licenses this
@@ -73,6 +75,14 @@ if(CONFIG_ARCH_TOOLCHAIN_GNU AND NOT CONFIG_ARCH_TOOLCHAIN_CLANG)
   endif()
 endif()
 
+# override the responsible file flag
+
+if(CMAKE_GENERATOR MATCHES "Ninja")
+  set(CMAKE_C_RESPONSE_FILE_FLAG "$DEFINES $INCLUDES $FLAGS @")
+  set(CMAKE_CXX_RESPONSE_FILE_FLAG "$DEFINES $INCLUDES $FLAGS @")
+  set(CMAKE_ASM_RESPONSE_FILE_FLAG "$DEFINES $INCLUDES $FLAGS @")
+endif()
+
 # override the ARCHIVE command
 
 set(CMAKE_ARCHIVE_COMMAND "<CMAKE_AR> rcs <TARGET> <LINK_FLAGS> <OBJECTS>")
@@ -127,12 +137,8 @@ if(CONFIG_STACK_USAGE_WARNING AND NOT "${CONFIG_STACK_USAGE_WARNING}" STREQUAL
   add_compile_options(-Wstack-usage=${CONFIG_STACK_USAGE_WARNING})
 endif()
 
-if(CONFIG_SCHED_GCOV_ALL)
-  add_compile_options(-fprofile-generate -ftest-coverage)
-endif()
-
-if(CONFIG_SCHED_GPROF_ALL)
-  add_compile_options(-pg)
+if(CONFIG_COVERAGE_ALL)
+  add_compile_options(-fprofile-arcs -ftest-coverage -fno-inline)
 endif()
 
 if(CONFIG_MM_UBSAN_ALL)
@@ -143,7 +149,7 @@ if(CONFIG_MM_UBSAN_TRAP_ON_ERROR)
   add_compile_options(-fsanitize-undefined-trap-on-error)
 endif()
 
-if(CONFIG_MM_KASAN_ALL)
+if(CONFIG_MM_KASAN_INSTRUMENT_ALL)
   add_compile_options(-fsanitize=kernel-address)
 endif()
 
@@ -165,7 +171,7 @@ if(CONFIG_ARCH_INSTRUMENT_ALL)
   add_compile_options(-finstrument-functions)
 endif()
 
-if(CONFIG_SCHED_GPROF_ALL)
+if(CONFIG_PROFILE_ALL)
   add_compile_options(-pg)
 endif()
 

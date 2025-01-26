@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/risc-v/src/mpfs/mpfs_irq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -54,7 +56,7 @@ void up_irqinitialize(void)
 
   /* Initialize PLIC for current hart */
 
-  mpfs_plic_init_hart(riscv_mhartid());
+  mpfs_plic_init_hart(up_cpu_index());
 
   /* Colorize the interrupt stack for debug purposes */
 
@@ -62,6 +64,13 @@ void up_irqinitialize(void)
   size_t intstack_size = (CONFIG_ARCH_INTERRUPTSTACK & ~15);
   riscv_stack_color(g_intstackalloc, intstack_size);
 #endif
+
+  /* Set priority for all global interrupts to 1 (lowest) */
+
+  for (int id = 1; id <= NR_IRQS; id++)
+    {
+      putreg32(1, MPFS_PLIC_PRIORITY + (4 * id));
+    }
 
   /* Attach the common interrupt handler */
 
@@ -94,6 +103,7 @@ void up_irqinitialize(void)
 void up_disable_irq(int irq)
 {
   int extirq = 0;
+  int i;
 
   if (irq == RISCV_IRQ_SOFT)
     {
@@ -110,18 +120,28 @@ void up_disable_irq(int irq)
   else if (irq >= MPFS_IRQ_EXT_START)
     {
       extirq = irq - MPFS_IRQ_EXT_START;
-
-      /* Clear enable bit for the irq */
-
-      uintptr_t iebase = mpfs_plic_get_iebase();
-
-      if (0 <= extirq && extirq <= NR_IRQS - MPFS_IRQ_EXT_START)
-        {
-          modifyreg32(iebase + (4 * (extirq / 32)), 1 << (extirq % 32), 0);
-        }
-      else
+      if (extirq < 0 || extirq > NR_IRQS - MPFS_IRQ_EXT_START)
         {
           PANIC();
+        }
+
+      /* Disable the irq on all harts, we don't know on which it was
+       * enabled
+       */
+
+      for (i = 0; i < CONFIG_SMP_NCPUS; i++)
+        {
+          uintptr_t iebase = mpfs_plic_get_iebase(riscv_cpuid_to_hartid(i));
+          uintptr_t claim_address =
+            mpfs_plic_get_claimbase(riscv_cpuid_to_hartid(i));
+
+          /* Clear enable bit for the irq */
+
+          modifyreg32(iebase + (4 * (extirq / 32)), 1 << (extirq % 32), 0);
+
+          /* Clear any already claimed IRQ */
+
+          putreg32(extirq, claim_address);
         }
     }
 }
@@ -156,7 +176,7 @@ void up_enable_irq(int irq)
 
       /* Set enable bit for the irq */
 
-      uintptr_t iebase = mpfs_plic_get_iebase();
+      uintptr_t iebase = mpfs_plic_get_iebase(up_cpu_index());
 
       if (0 <= extirq && extirq <= NR_IRQS - MPFS_IRQ_EXT_START)
         {

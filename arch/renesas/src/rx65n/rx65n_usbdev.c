@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/renesas/src/rx65n/rx65n_usbdev.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -43,6 +45,7 @@
 #include <nuttx/serial/serial.h>
 
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <arch/board/board.h>
 #include <arch/chip/types.h>
 
@@ -238,6 +241,10 @@ struct rx65n_usbdev_s
   /* The endpoint list */
 
   struct rx65n_ep_s      eplist[RX65N_NENDPOINTS];
+
+  /* Spinlock */
+
+  spinlock_t             lock;
 };
 
 /* For maintaining tables of endpoint info */
@@ -1836,9 +1843,9 @@ static void rx65n_reqcomplete(struct rx65n_ep_s *privep, int16_t result)
 
   /* Remove the completed request at the head of the endpoint request list */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   privreq = rx65n_rqdequeue(privep);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
 
   if (privreq)
     {
@@ -2996,10 +3003,10 @@ static int rx65n_epdisable(struct usbdev_ep_s *ep)
 
   /* Cancel any ongoing activity */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   rx65n_cancelrequests(privep);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
   return OK;
 }
 
@@ -3104,7 +3111,7 @@ static int rx65n_epsubmit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
   epno        = USB_EPNO(ep->eplog);
   req->result = -EINPROGRESS;
   req->xfrd   = 0;
-  flags       = enter_critical_section();
+  flags       = spin_lock_irqsave(&priv->lock);
 
   /* If we are stalled, then drop all requests on the floor */
 
@@ -3131,7 +3138,7 @@ static int rx65n_epsubmit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
         {
           privreq->req.len = CDC_CLASS_DATA_LENGTH;
           rx65n_rdrequest(epno, priv, privep);
-          leave_critical_section(flags);
+          spin_unlock_irqrestore(&priv->lock, flags);
           return OK;
         }
 
@@ -3140,7 +3147,7 @@ static int rx65n_epsubmit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
       if (!privep->txbusy)
         {
           ret = rx65n_wrrequest(epno, priv, privep);
-          leave_critical_section(flags);
+          spin_unlock_irqrestore(&priv->lock, flags);
           return OK;
         }
     }
@@ -3154,7 +3161,7 @@ static int rx65n_epsubmit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
       if (priv->ep0state == EP0STATE_RDREQUEST)
         {
           rx65n_rdrequest(epno, priv, privep);
-          leave_critical_section(flags);
+          spin_unlock_irqrestore(&priv->lock, flags);
           return OK;
         }
 
@@ -3187,7 +3194,7 @@ static int rx65n_epsubmit(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return ret;
 }
 
@@ -3228,9 +3235,9 @@ static int rx65n_epcancel(struct usbdev_ep_s *ep, struct usbdev_req_s *req)
 #endif
   usbtrace(TRACE_EPCANCEL, USB_EPNO(ep->eplog));
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   rx65n_cancelrequests(privep);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
   return OK;
 }
 
@@ -3245,7 +3252,7 @@ static inline struct rx65n_ep_s *rx65n_epreserve(struct rx65n_usbdev_s *priv,
   irqstate_t flags;
   int epndx = 0;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   epset &= priv->epavail;
   if (epset)
     {
@@ -3270,7 +3277,7 @@ static inline struct rx65n_ep_s *rx65n_epreserve(struct rx65n_usbdev_s *priv,
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return privep;
 }
 
@@ -3364,9 +3371,9 @@ errout:
 static inline void
 rx65n_epunreserve(struct rx65n_usbdev_s *priv, struct rx65n_ep_s *privep)
 {
-  irqstate_t flags = enter_critical_section();
+  irqstate_t flags = spin_lock_irqsave(&priv->lock);
   priv->epavail |= RX65N_ENDP_BIT(USB_EPNO(privep->ep.eplog));
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -6028,6 +6035,10 @@ void renesas_usbinitialize(void)
   uint16_t regval;
   int epno;
   usbtrace(TRACE_DEVINIT, 0);
+
+  /* Initialize driver lock */
+
+  spin_lock_init(&priv->lock);
 
   /* Enable write to System registers */
 

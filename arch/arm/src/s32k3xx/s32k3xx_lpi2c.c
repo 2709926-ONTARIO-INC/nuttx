@@ -37,7 +37,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/clock.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
@@ -198,6 +198,7 @@ struct s32k3xx_lpi2c_priv_s
 
   int refs;                    /* Reference count */
   mutex_t lock;                /* Mutual exclusion mutex */
+  spinlock_t spinlock;         /* Spinlock */
 #ifndef CONFIG_I2C_POLLED
   sem_t sem_isr;               /* Interrupt wait semaphore */
 #endif
@@ -349,6 +350,7 @@ static struct s32k3xx_lpi2c_priv_s s32k3xx_lpi2c0_priv =
   .config     = &s32k3xx_lpi2c0_config,
   .refs       = 0,
   .lock       = NXMUTEX_INITIALIZER,
+  .spinlock   = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr    = SEM_INITIALIZER(0),
 #endif
@@ -391,6 +393,7 @@ static struct s32k3xx_lpi2c_priv_s s32k3xx_lpi2c1_priv =
   .config     = &s32k3xx_lpi2c1_config,
   .refs       = 0,
   .lock       = NXMUTEX_INITIALIZER,
+  .spinlock   = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr    = SEM_INITIALIZER(0),
 #endif
@@ -504,7 +507,7 @@ s32k3xx_lpi2c_sem_waitdone(struct s32k3xx_lpi2c_priv_s *priv)
   uint32_t regval;
   int ret;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
 #ifdef CONFIG_S32K3XX_LPI2C_DMA
   if (priv->rxdma == NULL && priv->txdma == NULL)
@@ -584,7 +587,7 @@ s32k3xx_lpi2c_sem_waitdone(struct s32k3xx_lpi2c_priv_s *priv)
       s32k3xx_lpi2c_putreg(priv, S32K3XX_LPI2C_SIER_OFFSET, 0);
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
   return ret;
 }
 #else
@@ -990,7 +993,7 @@ static void s32k3xx_lpi2c_setclock(struct s32k3xx_lpi2c_priv_s *priv,
           DEBUGASSERT(src_freq != 0);
 
           /* LPI2C output frequency = (Source Clock (Hz)/ 2^prescale) /
-           *   (CLKLO + 1 + CLKHI + 1 + ROUNDDOWN((2 + FILTSCL) / 2^prescale)
+           *   (CLKLO + 1 + CLKHI + 1 + ALIGN_DOWN((2 + FILTSCL)/2^prescale)
            *
            * Assume  CLKLO = 2 * CLKHI, SETHOLD = CLKHI, DATAVD = CLKHI / 2
            */
@@ -1299,7 +1302,7 @@ static int s32k3xx_lpi2c_isr_process(struct s32k3xx_lpi2c_priv_s *priv)
                */
 
     #ifdef CONFIG_I2C_POLLED
-              irqstate_t flags = enter_critical_section();
+              irqstate_t flags = spin_lock_irqsave(&priv->spinlock);
     #endif
 
               /* Receive a byte */
@@ -1310,7 +1313,7 @@ static int s32k3xx_lpi2c_isr_process(struct s32k3xx_lpi2c_priv_s *priv)
               priv->dcnt--;
 
     #ifdef CONFIG_I2C_POLLED
-              leave_critical_section(flags);
+              spin_unlock_irqrestore(&priv->spinlock, flags);
     #endif
               /* Last byte of last message? */
 
@@ -2162,7 +2165,7 @@ struct i2c_master_s *s32k3xx_i2cbus_initialize(int port)
    * power-up hardware and configure GPIOs.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   if ((volatile int)priv->refs++ == 0)
     {
@@ -2171,21 +2174,25 @@ struct i2c_master_s *s32k3xx_i2cbus_initialize(int port)
 #ifdef CONFIG_S32K3XX_LPI2C_DMA
       if (priv->config->dma_txreqsrc != 0)
         {
+          spin_unlock_irqrestore(&priv->spinlock, flags);
           priv->txdma = s32k3xx_dmach_alloc(priv->config->dma_txreqsrc |
                                         DMAMUX_CHCFG_ENBL, 0);
+          flags = spin_lock_irqsave(&priv->spinlock);
           DEBUGASSERT(priv->txdma != NULL);
         }
 
       if (priv->config->dma_rxreqsrc != 0)
         {
+          spin_unlock_irqrestore(&priv->spinlock, flags);
           priv->rxdma = s32k3xx_dmach_alloc(priv->config->dma_rxreqsrc |
                                         DMAMUX_CHCFG_ENBL, 0);
+          flags = spin_lock_irqsave(&priv->spinlock);
           DEBUGASSERT(priv->rxdma != NULL);
         }
 #endif
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 
   return (struct i2c_master_s *)priv;
 }
@@ -2212,15 +2219,15 @@ int s32k3xx_i2cbus_uninitialize(struct i2c_master_s *dev)
       return ERROR;
     }
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   if (--priv->refs > 0)
     {
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->spinlock, flags);
       return OK;
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 
   /* Disable power and other HW resource (GPIO's) */
 

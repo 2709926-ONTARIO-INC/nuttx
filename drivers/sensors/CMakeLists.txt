@@ -285,7 +285,7 @@ if(CONFIG_SENSORS)
     endif()
 
     if(CONFIG_SENSORS_SHT4X)
-      list(APPEND SRCS sht4x.c)
+      list(APPEND SRCS sht4x_uorb.c)
     endif()
 
     if(CONFIG_SENSORS_SPS30)
@@ -298,6 +298,10 @@ if(CONFIG_SENSORS)
 
     if(CONFIG_SENSORS_LTR308)
       list(APPEND SRCS ltr308_uorb.c)
+    endif()
+
+    if(CONFIG_SENSORS_FS3000)
+      list(APPEND SRCS fs3000_uorb.c)
     endif()
 
     if(CONFIG_SENSORS_BMM150)
@@ -364,6 +368,16 @@ if(CONFIG_SENSORS)
 
     if(CONFIG_SENSORS_AS5048A)
       list(APPEND SRCS as5048a.c)
+    endif()
+
+    if(CONFIG_SENSORS_BMI088)
+      list(APPEND SRCS bmi088_base.c)
+      if(CONFIG_SENSORS_BMI088_UORB)
+        list(APPEND SRCS bmi088_uorb.c)
+      else()
+        list(APPEND SRCS bmi088.c)
+      endif()
+
     endif()
 
   endif() # CONFIG_SPI

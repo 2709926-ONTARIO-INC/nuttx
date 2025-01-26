@@ -91,7 +91,7 @@ ifeq ($(CONFIG_ESPRESSIF_BOOTLOADER_MCUBOOT),y)
 	APP_IMAGE      := nuttx.bin
 	FLASH_APP      := $(APP_OFFSET) $(APP_IMAGE)
 	IMGTOOL_ALIGN_ARGS := --align 4
-	IMGTOOL_SIGN_ARGS  := --pad $(VERIFIED) $(IMGTOOL_ALIGN_ARGS) -v 0 -s auto \
+	IMGTOOL_SIGN_ARGS  := --pad $(VERIFIED) $(IMGTOOL_ALIGN_ARGS) -v $(CONFIG_ESPRESSIF_MCUBOOT_SIGN_IMAGE_VERSION) -s auto \
 		-H $(CONFIG_ESPRESSIF_APP_MCUBOOT_HEADER_SIZE) --pad-header \
 		-S $(CONFIG_ESPRESSIF_OTA_SLOT_SIZE)
 else ifeq ($(CONFIG_ESPRESSIF_SIMPLE_BOOT),y)
@@ -116,7 +116,7 @@ define MERGEBIN
 		echo "Missing Flash memory size configuration."; \
 		exit 1; \
 	fi
-	esptool.py -c $(CHIP_SERIES) merge_bin --output nuttx.merged.bin $(ESPTOOL_BINS)
+	esptool.py -c $(CHIP_SERIES) merge_bin --fill-flash-size $(FLASH_SIZE) --output nuttx.merged.bin $(ESPTOOL_BINS)
 	$(Q) echo nuttx.merged.bin >> nuttx.manifest
 	$(Q) echo "Generated: nuttx.merged.bin"
 endef

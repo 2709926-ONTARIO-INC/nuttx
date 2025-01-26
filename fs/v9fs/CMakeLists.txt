@@ -23,8 +23,12 @@
 if(CONFIG_FS_V9FS)
   set(V9FS client.c transport.c v9fs.c)
 
-  if(CONFIG_DRIVERS_VIRTIO_9P)
+  if(CONFIG_V9FS_VIRTIO_9P)
     list(APPEND V9FS virtio_9p.c)
+  endif()
+
+  if(CONFIG_V9FS_SOCKET_9P)
+    list(APPEND V9FS socket_9p.c)
   endif()
 
   target_sources(fs PRIVATE ${V9FS})

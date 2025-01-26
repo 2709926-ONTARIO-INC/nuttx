@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/imxrt/imxrt_lpi2c.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -35,7 +37,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/clock.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
@@ -47,7 +49,6 @@
 #include "imxrt_lpi2c.h"
 #include "imxrt_edma.h"
 #include "imxrt_gpio.h"
-#include "imxrt_lpi2c.h"
 
 #include "hardware/imxrt_dmamux.h"
 #include "hardware/imxrt_pinmux.h"
@@ -196,6 +197,7 @@ struct imxrt_lpi2c_priv_s
 
   int refs;                    /* Reference count */
   mutex_t lock;                /* Mutual exclusion mutex */
+  spinlock_t spinlock;         /* Spinlock */
 #ifndef CONFIG_I2C_POLLED
   sem_t sem_isr;               /* Interrupt wait semaphore */
 #endif
@@ -354,6 +356,7 @@ static struct imxrt_lpi2c_priv_s imxrt_lpi2c1_priv =
   .config        = &imxrt_lpi2c1_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -399,6 +402,7 @@ static struct imxrt_lpi2c_priv_s imxrt_lpi2c2_priv =
   .config        = &imxrt_lpi2c2_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -444,6 +448,7 @@ static struct imxrt_lpi2c_priv_s imxrt_lpi2c3_priv =
   .config        = &imxrt_lpi2c3_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -489,6 +494,7 @@ static struct imxrt_lpi2c_priv_s imxrt_lpi2c4_priv =
   .config        = &imxrt_lpi2c4_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -531,6 +537,7 @@ static struct imxrt_lpi2c_priv_s imxrt_lpi2c5_priv =
   .config        = &imxrt_lpi2c5_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -573,6 +580,7 @@ static struct imxrt_lpi2c_priv_s imxrt_lpi2c6_priv =
   .config        = &imxrt_lpi2c6_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -686,7 +694,7 @@ imxrt_lpi2c_sem_waitdone(struct imxrt_lpi2c_priv_s *priv)
   uint32_t regval;
   int ret;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
 #ifdef CONFIG_IMXRT_LPI2C_DMA
   if (priv->dma == NULL)
@@ -767,7 +775,7 @@ imxrt_lpi2c_sem_waitdone(struct imxrt_lpi2c_priv_s *priv)
       imxrt_lpi2c_putreg(priv, IMXRT_LPI2C_SIER_OFFSET, 0);
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
   return ret;
 }
 #else
@@ -1160,7 +1168,7 @@ static void imxrt_lpi2c_setclock(struct imxrt_lpi2c_priv_s *priv,
 #endif
 
           /* LPI2C output frequency = (Source Clock (Hz)/ 2^prescale) /
-           *   (CLKLO + 1 + CLKHI + 1 + ROUNDDOWN((2 + FILTSCL) / 2^prescale)
+           *   (CLKLO + 1 + CLKHI + 1 + ALIGN_DOWN((2 + FILTSCL)/2^prescale)
            *
            * Assume  CLKLO = 2 * CLKHI, SETHOLD = CLKHI, DATAVD = CLKHI / 2
            */
@@ -1468,7 +1476,7 @@ static int imxrt_lpi2c_isr_process(struct imxrt_lpi2c_priv_s *priv)
                */
 
     #ifdef CONFIG_I2C_POLLED
-              irqstate_t flags = enter_critical_section();
+              irqstate_t flags = spin_lock_irqsave(&priv->spinlock);
     #endif
 
               /* Receive a byte */
@@ -1479,7 +1487,7 @@ static int imxrt_lpi2c_isr_process(struct imxrt_lpi2c_priv_s *priv)
               priv->dcnt--;
 
     #ifdef CONFIG_I2C_POLLED
-              leave_critical_section(flags);
+              spin_unlock_irqrestore(&priv->spinlock, flags);
     #endif
               /* Last byte of last message? */
 
@@ -2455,7 +2463,7 @@ struct i2c_master_s *imxrt_i2cbus_initialize(int port)
    * power-up hardware and configure GPIOs.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   if ((volatile int)priv->refs++ == 0)
     {
@@ -2464,14 +2472,16 @@ struct i2c_master_s *imxrt_i2cbus_initialize(int port)
 #ifdef CONFIG_IMXRT_LPI2C_DMA
       if (priv->config->dma_reqsrc != 0)
         {
+          spin_unlock_irqrestore(&priv->spinlock, flags);
           priv->dma = imxrt_dmach_alloc(priv->config->dma_reqsrc |
                                         DMAMUX_CHCFG_ENBL, 0);
+          flags = spin_lock_irqsave(&priv->spinlock);
           DEBUGASSERT(priv->dma != NULL);
         }
 #endif
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 
   return (struct i2c_master_s *)priv;
 }
@@ -2498,15 +2508,15 @@ int imxrt_i2cbus_uninitialize(struct i2c_master_s *dev)
       return ERROR;
     }
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   if (--priv->refs > 0)
     {
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->spinlock, flags);
       return OK;
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 
   /* Disable power and other HW resource (GPIO's) */
 

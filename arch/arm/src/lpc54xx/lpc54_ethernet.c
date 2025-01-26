@@ -1,15 +1,12 @@
 /****************************************************************************
  * arch/arm/src/lpc54xx/lpc54_ethernet.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *
- * Some of the logic in this file was developed using sample code provided by
- * NXP that has a compatible BSD license:
- *
- *   Copyright (c) 2016, Freescale Semiconductor, Inc.
- *   Copyright 2016-2017 NXP
- *   All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-FileCopyrightText: 2017 Gregory Nutt. All rights reserved.
+ * SPDX-FileCopyrightText: 2016 Freescale Semiconductor Inc.
+ * SPDX-FileCopyrightText: 2016 - 2017, NXP
+ * SPDX-FileContributor: Gregory Nutt <gnutt@nuttx.org>
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -74,7 +71,7 @@
 #include <arpa/inet.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/queue.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
@@ -300,6 +297,7 @@ struct lpc54_ethdriver_s
   struct work_s eth_pollwork;    /* For deferring poll work to the work queue */
   struct work_s eth_timeoutwork; /* For deferring timeout work to the work queue */
   struct sq_queue_s eth_freebuf; /* Free packet buffers */
+  spinlock_t eth_lock;           /* Spinlock */
 
   /* Ring state */
 
@@ -2004,7 +2002,7 @@ static int lpc54_eth_ifdown(struct net_driver_s *dev)
 
   /* Disable the Ethernet interrupt */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->eth_lock);
   up_disable_irq(LPC54_IRQ_ETHERNET);
 
   /* Cancel the TX timeout timers */
@@ -2043,14 +2041,14 @@ static int lpc54_eth_ifdown(struct net_driver_s *dev)
   if (ret < 0)
     {
       nerr("ERROR: lpc54_phy_reset failed: %d\n", ret);
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->eth_lock, flags);
       return ret;
     }
 
   /* Mark the device "down" */
 
   priv->eth_bifup = 0;
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->eth_lock, flags);
   return OK;
 }
 
@@ -2883,6 +2881,8 @@ void arm_netinitialize(void)
   priv->eth_dev.d_ioctl   = lpc54_eth_ioctl;    /* Handle network IOCTL commands */
 #endif
   priv->eth_dev.d_private = &g_ethdriver;       /* Used to recover private state from dev */
+
+  spin_lock_init(&priv->eth_lock);              /* Initialize spinlock */
 
   /* Configure GPIO pins to support Ethernet */
 

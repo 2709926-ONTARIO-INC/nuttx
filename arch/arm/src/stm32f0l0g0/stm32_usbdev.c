@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/stm32f0l0g0/stm32_usbdev.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -46,6 +48,7 @@
 #include <nuttx/usb/usbdev_trace.h>
 
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 
 #include "arm_internal.h"
 #include "hardware/stm32_rcc.h"
@@ -340,6 +343,10 @@ struct stm32_usbdev_s
   /* The endpoint list */
 
   struct stm32_ep_s      eplist[STM32_NENDPOINTS];
+
+  /* Spinlock */
+
+  spinlock_t             lock;
 };
 
 /****************************************************************************
@@ -1159,16 +1166,14 @@ stm32_abortrequest(struct stm32_ep_s *privep,
  * Name: stm32_reqcomplete
  ****************************************************************************/
 
-static void stm32_reqcomplete(struct stm32_ep_s *privep, int16_t result)
+static void stm32_reqcomplete_nolock(struct stm32_ep_s *privep,
+                                     int16_t result)
 {
   struct stm32_req_s *privreq;
-  irqstate_t flags;
 
   /* Remove the completed request at the head of the endpoint request list */
 
-  flags = enter_critical_section();
   privreq = stm32_rqdequeue(privep);
-  leave_critical_section(flags);
 
   if (privreq)
     {
@@ -1195,6 +1200,15 @@ static void stm32_reqcomplete(struct stm32_ep_s *privep, int16_t result)
 
       privep->stalled = stalled;
     }
+}
+
+static void stm32_reqcomplete(struct stm32_ep_s *privep, int16_t result)
+{
+  irqstate_t flags = spin_lock_irqsave(&privep->dev->lock);
+
+  stm32_reqcomplete_nolock(privep, result);
+
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
 }
 
 /****************************************************************************
@@ -2667,7 +2681,7 @@ stm32_epreserve(struct stm32_usbdev_s *priv, uint8_t epset)
   irqstate_t flags;
   int epndx = 0;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   epset &= priv->epavail;
   if (epset)
     {
@@ -2692,7 +2706,7 @@ stm32_epreserve(struct stm32_usbdev_s *priv, uint8_t epset)
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return privep;
 }
 
@@ -2703,9 +2717,9 @@ stm32_epreserve(struct stm32_usbdev_s *priv, uint8_t epset)
 static inline void
 stm32_epunreserve(struct stm32_usbdev_s *priv, struct stm32_ep_s *privep)
 {
-  irqstate_t flags = enter_critical_section();
+  irqstate_t flags = spin_lock_irqsave(&priv->lock);
   priv->epavail   |= STM32_ENDP_BIT(USB_EPNO(privep->ep.eplog));
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -2728,7 +2742,7 @@ static int stm32_epallocpma(struct stm32_usbdev_s *priv)
   int bufno = ERROR;
   int bufndx;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   for (bufndx = 2; bufndx < STM32_NBUFFERS; bufndx++)
     {
       /* Check if this buffer is available */
@@ -2747,7 +2761,7 @@ static int stm32_epallocpma(struct stm32_usbdev_s *priv)
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return bufno;
 }
 
@@ -2758,9 +2772,9 @@ static int stm32_epallocpma(struct stm32_usbdev_s *priv)
 static inline void
 stm32_epfreepma(struct stm32_usbdev_s *priv, struct stm32_ep_s *privep)
 {
-  irqstate_t flags = enter_critical_section();
+  irqstate_t flags = spin_lock_irqsave(&priv->lock);
   priv->epavail   |= STM32_ENDP_BIT(privep->bufno);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -2892,7 +2906,7 @@ static int stm32_epdisable(struct usbdev_ep_s *ep)
 
   /* Cancel any ongoing activity */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   stm32_cancelrequests(privep);
 
   /* Disable TX; disable RX */
@@ -2901,7 +2915,7 @@ static int stm32_epdisable(struct usbdev_ep_s *ep)
   stm32_seteprxstatus(epno, USB_EPR_STATRX_DIS);
   stm32_seteptxstatus(epno, USB_EPR_STATTX_DIS);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
   return OK;
 }
 
@@ -2995,7 +3009,7 @@ static int stm32_epsubmit(struct usbdev_ep_s *ep,
   epno        = USB_EPNO(ep->eplog);
   req->result = -EINPROGRESS;
   req->xfrd   = 0;
-  flags       = enter_critical_section();
+  flags       = spin_lock_irqsave(&priv->lock);
 
   /* If we are stalled, then drop all requests on the floor */
 
@@ -3070,7 +3084,7 @@ static int stm32_epsubmit(struct usbdev_ep_s *ep,
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return ret;
 }
 
@@ -3093,9 +3107,9 @@ static int stm32_epcancel(struct usbdev_ep_s *ep,
 #endif
   usbtrace(TRACE_EPCANCEL, USB_EPNO(ep->eplog));
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   stm32_cancelrequests(privep);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
   return OK;
 }
 
@@ -3125,7 +3139,7 @@ static int stm32_epstall(struct usbdev_ep_s *ep, bool resume)
 
   /* STALL or RESUME the endpoint */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   usbtrace(resume ? TRACE_EPRESUME : TRACE_EPSTALL, USB_EPNO(ep->eplog));
 
   /* Get status of the endpoint; stall the request if the endpoint is
@@ -3150,7 +3164,7 @@ static int stm32_epstall(struct usbdev_ep_s *ep, bool resume)
           priv->ep0state = EP0STATE_STALLED;
         }
 
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->lock, flags);
       return -ENODEV;
     }
 
@@ -3236,7 +3250,7 @@ static int stm32_epstall(struct usbdev_ep_s *ep, bool resume)
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return OK;
 }
 
@@ -3401,7 +3415,7 @@ static int stm32_wakeup(struct usbdev_s *dev)
    * by the ESOF interrupt.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   stm32_initresume(priv);
   priv->rsmstate = RSMSTATE_STARTED;
 
@@ -3413,7 +3427,7 @@ static int stm32_wakeup(struct usbdev_s *dev)
 
   stm32_setimask(priv, USB_CNTR_ESOFM, USB_CNTR_WKUPM | USB_CNTR_SUSPM);
   stm32_putreg(~USB_ISTR_ESOF, STM32_USB_ISTR);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return OK;
 }
 
@@ -3648,6 +3662,61 @@ static void stm32_hwshutdown(struct stm32_usbdev_s *priv)
 }
 
 /****************************************************************************
+ * Name: usbdev_unregister_nolock
+ *
+ * Description:
+ *   The version of the public function usbdev_unregister without spin lock.
+ *
+ ****************************************************************************/
+
+static int usbdev_unregister_nolock(struct usbdevclass_driver_s *driver)
+{
+  /* For now there is only one USB controller, but we will always refer to
+   * it using a pointer to make any future ports to multiple USB controllers
+   * easier.
+   */
+
+  struct stm32_usbdev_s *priv = &g_usbdev;
+
+  usbtrace(TRACE_DEVUNREGISTER, 0);
+
+#ifdef CONFIG_DEBUG_USB
+  if (driver != priv->driver)
+    {
+      usbtrace(TRACE_DEVERROR(STM32_TRACEERR_INVALIDPARMS), 0);
+      return -EINVAL;
+    }
+#endif
+
+  /* Reset the hardware and cancel all requests.  All requests must be
+   * canceled while the class driver is still bound.
+   */
+
+  stm32_reset(priv);
+
+  /* Unbind the class driver */
+
+  CLASS_UNBIND(driver, &priv->usbdev);
+
+  /* Disable USB controller interrupts (but keep them attached) */
+
+  up_disable_irq(STM32_IRQ_USB);
+
+  /* Put the hardware in an inactive state.  Then bring the hardware back up
+   * in the reset state (this is probably not necessary, the stm32_reset()
+   * call above was probably sufficient).
+   */
+
+  stm32_hwshutdown(priv);
+  stm32_hwsetup(priv);
+
+  /* Unhook the driver */
+
+  priv->driver = NULL;
+  return OK;
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -3674,6 +3743,10 @@ void arm_usbinitialize(void)
   uint32_t regval;
 
   usbtrace(TRACE_DEVINIT, 0);
+
+  /* Initialize driver lock */
+
+  spin_lock_init(&priv->lock);
 
   /* Configure USB GPIO alternate function pins */
 
@@ -3731,7 +3804,7 @@ void arm_usbuninitialize(void)
   struct stm32_usbdev_s *priv = &g_usbdev;
   irqstate_t flags;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   usbtrace(TRACE_DEVUNINIT, 0);
 
   /* Disable and detach the USB IRQs */
@@ -3742,13 +3815,13 @@ void arm_usbuninitialize(void)
   if (priv->driver)
     {
       usbtrace(TRACE_DEVERROR(STM32_TRACEERR_DRIVERREGISTERED), 0);
-      usbdev_unregister(priv->driver);
+      usbdev_unregister_nolock(priv->driver);
     }
 
   /* Put the hardware in an inactive state */
 
   stm32_hwshutdown(priv);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -3835,52 +3908,13 @@ int usbdev_register(struct usbdevclass_driver_s *driver)
 
 int usbdev_unregister(struct usbdevclass_driver_s *driver)
 {
-  /* For now there is only one USB controller, but we will always refer to
-   * it using a pointer to make any future ports to multiple USB controllers
-   * easier.
-   */
+  int ret;
 
-  struct stm32_usbdev_s *priv = &g_usbdev;
-  irqstate_t flags;
+  irqstate_t flags = spin_lock_irqsave(&g_usbdev.lock);
+  ret = usbdev_unregister_nolock(driver);
+  spin_unlock_irqrestore(&g_usbdev.lock, flags);
 
-  usbtrace(TRACE_DEVUNREGISTER, 0);
-
-#ifdef CONFIG_DEBUG_USB
-  if (driver != priv->driver)
-    {
-      usbtrace(TRACE_DEVERROR(STM32_TRACEERR_INVALIDPARMS), 0);
-      return -EINVAL;
-    }
-#endif
-
-  /* Reset the hardware and cancel all requests.  All requests must be
-   * canceled while the class driver is still bound.
-   */
-
-  flags = enter_critical_section();
-  stm32_reset(priv);
-
-  /* Unbind the class driver */
-
-  CLASS_UNBIND(driver, &priv->usbdev);
-
-  /* Disable USB controller interrupts (but keep them attached) */
-
-  up_disable_irq(STM32_IRQ_USB);
-
-  /* Put the hardware in an inactive state.  Then bring the hardware back up
-   * in the reset state (this is probably not necessary, the stm32_reset()
-   * call above was probably sufficient).
-   */
-
-  stm32_hwshutdown(priv);
-  stm32_hwsetup(priv);
-
-  /* Unhook the driver */
-
-  priv->driver = NULL;
-  leave_critical_section(flags);
-  return OK;
+  return ret;
 }
 
 #endif /* CONFIG_USBDEV && CONFIG_STM32F0L0G0_USB */

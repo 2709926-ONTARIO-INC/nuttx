@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/tiva/common/tiva_irq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -28,7 +30,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/arch.h>
 #include <arch/irq.h>
 #include <arch/armv7-m/nvicpri.h>
@@ -59,6 +61,14 @@
 #define NVIC_CLRENA_OFFSET (NVIC_IRQ0_31_CLEAR - NVIC_IRQ0_31_ENABLE)
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+#if defined(CONFIG_DEBUG_IRQ_INFO)
+static spinlock_t g_irq_lock = SP_UNLOCKED;
+#endif
+
+/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -75,7 +85,7 @@ static void tiva_dumpnvic(const char *msg, int irq)
 {
   irqstate_t flags;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&g_irq_lock);
   irqinfo("NVIC (%s, irq=%d):\n", msg, irq);
   irqinfo("  INTCTRL:    %08x VECTAB: %08x\n",
           getreg32(NVIC_INTCTRL), getreg32(NVIC_VECTAB));
@@ -186,7 +196,7 @@ static void tiva_dumpnvic(const char *msg, int irq)
 #if TIVA_IRQ_NEXTINT > 159
 #  warning Missing output
 #endif
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_irq_lock, flags);
 }
 #else
 #  define tiva_dumpnvic(msg, irq)
@@ -237,7 +247,6 @@ static int tiva_reserved(int irq, void *context, void *arg)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_ARMV7M_USEBASEPRI
 static inline void tiva_prioritize_syscall(int priority)
 {
   uint32_t regval;
@@ -249,7 +258,6 @@ static inline void tiva_prioritize_syscall(int priority)
   regval |= (priority << NVIC_SYSH_PRIORITY_PR11_SHIFT);
   putreg32(regval, NVIC_SYSH8_11_PRIORITY);
 }
-#endif
 
 /****************************************************************************
  * Name: tiva_irqinfo
@@ -447,9 +455,8 @@ void up_irqinitialize(void)
 #ifdef CONFIG_ARCH_IRQPRIO
   /* up_prioritize_irq(TIVA_IRQ_PENDSV, NVIC_SYSH_PRIORITY_MIN); */
 #endif
-#ifdef CONFIG_ARMV7M_USEBASEPRI
+
   tiva_prioritize_syscall(NVIC_SYSH_SVCALL_PRIORITY);
-#endif
 
   /* If the MPU is enabled, then attach and enable the Memory Management
    * Fault handler.

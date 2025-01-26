@@ -20,6 +20,7 @@ config ARCH_INTEL64
 	select ARCH_USE_MMU
 	select ARCH_HAVE_ADDRENV
 	select ARCH_NEED_ADDRENV_MAPPING
+	select ARCH_HAVE_ELF_EXECUTABLE
 	select ARCH_HAVE_TICKLESS
 	select ARCH_HAVE_STACKCHECK
 	select ARCH_HAVE_RNG
@@ -146,6 +147,34 @@ config MULTBOOT2_FB_TERM
 	depends on NXFONTS
 	---help---
 		Enable a framebuffer terminal for early debug printing
+
+config MULTBOOT2_FB
+	bool "Multiboot2 framebuffer"
+	default n
+	---help---
+		Enable a framebuffer support
+
+if MULTBOOT2_FB
+
+config MULTBOOT2_FB_WIDTH
+	int "Multiboot2 framebuffer width"
+	default 1024
+	---help---
+		Requested framebuffer width
+
+config MULTBOOT2_FB_HEIGHT
+	int "Multiboot2 framebuffer height"
+	default 768
+	---help---
+		Requested framebuffer height
+
+config MULTBOOT2_FB_DEEPTH
+	int "Multiboot2 framebuffer deepth"
+	default 32
+	---help---
+		Requested framebuffer deepth
+
+endif # MULTBOOT2_FB
 
 endif # ARCH_MULTIBOOT2
 

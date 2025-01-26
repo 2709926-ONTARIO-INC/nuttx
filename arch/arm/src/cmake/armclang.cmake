@@ -1,6 +1,8 @@
 # ##############################################################################
 # arch/arm/src/cmake/armclang.cmake
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
 # additional information regarding copyright ownership.  The ASF licenses this
@@ -116,11 +118,11 @@ if(CONFIG_STACK_USAGE_WARNING AND NOT "${CONFIG_STACK_USAGE_WARNING}" STREQUAL
   add_compile_options(-Wstack-usage=${CONFIG_STACK_USAGE_WARNING})
 endif()
 
-if(CONFIG_SCHED_GCOV)
-  add_compile_options(-fprofile-generate -ftest-coverage)
+if(CONFIG_COVERAGE_ALL)
+  add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
 endif()
 
-if(CONFIG_SCHED_GPROF_ALL)
+if(CONFIG_PROFILE_ALL)
   add_compile_options(-pg)
 endif()
 
@@ -132,7 +134,7 @@ if(CONFIG_MM_UBSAN_TRAP_ON_ERROR)
   add_compile_options(-fsanitize-undefined-trap-on-error)
 endif()
 
-if(CONFIG_MM_KASAN_ALL)
+if(CONFIG_MM_KASAN_INSTRUMENT_ALL)
   add_compile_options(-fsanitize=kernel-address)
 endif()
 

@@ -174,8 +174,13 @@ else
 endif
 endif
 
-ifeq ($(CONFIG_SENSORS_BMM150),y)
-  CSRCS += bmm150.c
+ifeq ($(CONFIG_SENSORS_BMI088),y)
+  CSRCS += bmi088_base.c
+ifeq ($(CONFIG_SENSORS_BMI088_UORB),y)
+  CSRCS += bmi088_uorb.c
+else
+  CSRCS += bmi088.c
+endif
 endif
 
 ifeq ($(CONFIG_SENSORS_BMP180),y)
@@ -217,6 +222,10 @@ endif
 
 ifeq ($(CONFIG_SENSORS_MB7040),y)
   CSRCS += mb7040.c
+endif
+
+ifeq ($(CONFIG_SENSORS_MCP9600),y)
+  CSRCS += mcp9600_uorb.c
 endif
 
 ifeq ($(CONFIG_SENSORS_MCP9844),y)
@@ -280,7 +289,7 @@ ifeq ($(CONFIG_SENSORS_SHT3X),y)
 endif
 
 ifeq ($(CONFIG_SENSORS_SHT4X),y)
-  CSRCS += sht4x.c
+  CSRCS += sht4x_uorb.c
 endif
 
 ifeq ($(CONFIG_SENSORS_SPS30),y)
@@ -293,6 +302,10 @@ endif
 
 ifeq ($(CONFIG_SENSORS_LTR308),y)
   CSRCS += ltr308_uorb.c
+endif
+
+ifeq ($(CONFIG_SENSORS_FS3000),y)
+  CSRCS += fs3000_uorb.c
 endif
 
 ifeq ($(CONFIG_SENSORS_BMM150),y)

@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/risc-v/src/esp32c3-legacy/esp32c3_rt_timer.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this args for additional information regarding copyright ownership.  The
@@ -34,7 +36,7 @@
 #include <debug.h>
 
 #include <nuttx/nuttx.h>
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/kthread.h>
 #include <nuttx/kmalloc.h>
 #include <nuttx/semaphore.h>
@@ -74,6 +76,7 @@ struct esp32c3_rt_priv_s
   struct list_node runlist;
   struct list_node toutlist;
   struct esp32c3_tim_dev_s *timer;
+  spinlock_t lock;
 };
 
 /****************************************************************************
@@ -107,17 +110,14 @@ static struct esp32c3_rt_priv_s g_rt_priv =
  *
  ****************************************************************************/
 
-static void start_rt_timer(struct rt_timer_s *timer,
-                           uint64_t timeout,
-                           bool repeat)
+static void start_rt_timer_nolock(struct rt_timer_s *timer,
+                                  uint64_t timeout,
+                                  bool repeat)
 {
-  irqstate_t flags;
   struct rt_timer_s *p;
   bool inserted = false;
   uint64_t counter;
   struct esp32c3_rt_priv_s *priv = &g_rt_priv;
-
-  flags = enter_critical_section();
 
   /* Only idle timer can be started */
 
@@ -176,8 +176,18 @@ static void start_rt_timer(struct rt_timer_s *timer,
           ESP32C3_TIM_SETALRM(priv->timer, true);
         }
     }
+}
 
-  leave_critical_section(flags);
+static void start_rt_timer(struct rt_timer_s *timer,
+                           uint64_t timeout,
+                           bool repeat)
+{
+  irqstate_t flags;
+  struct esp32c3_rt_priv_s *priv = &g_rt_priv;
+
+  flags = spin_lock_irqsave(&priv->lock);
+  start_rt_timer_nolock(timer, timeout, repeat);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -195,15 +205,12 @@ static void start_rt_timer(struct rt_timer_s *timer,
  *
  ****************************************************************************/
 
-static void stop_rt_timer(struct rt_timer_s *timer)
+static void stop_rt_timer_nolock(struct rt_timer_s *timer)
 {
-  irqstate_t flags;
   bool ishead;
   struct rt_timer_s *next_timer;
   uint64_t alarm;
   struct esp32c3_rt_priv_s *priv = &g_rt_priv;
-
-  flags = enter_critical_section();
 
   /* "start" function can set the timer's repeat flag, and "stop" function
    * should remove this flag.
@@ -251,8 +258,16 @@ static void stop_rt_timer(struct rt_timer_s *timer)
             }
         }
     }
+}
 
-  leave_critical_section(flags);
+static void stop_rt_timer(struct rt_timer_s *timer)
+{
+  irqstate_t flags;
+  struct esp32c3_rt_priv_s *priv = &g_rt_priv;
+
+  flags = spin_lock_irqsave(&priv->lock);
+  stop_rt_timer_nolock(timer);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -278,11 +293,11 @@ static void delete_rt_timer(struct rt_timer_s *timer)
 
   struct esp32c3_rt_priv_s *priv = &g_rt_priv;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
 
   if (timer->state == RT_TIMER_READY)
     {
-      stop_rt_timer(timer);
+      stop_rt_timer_nolock(timer);
     }
   else if (timer->state == RT_TIMER_TIMEOUT)
     {
@@ -305,7 +320,7 @@ static void delete_rt_timer(struct rt_timer_s *timer)
     }
 
 exit:
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -343,7 +358,7 @@ static int rt_timer_thread(int argc, char *argv[])
           ASSERT(0);
         }
 
-      flags = enter_critical_section();
+      flags = spin_lock_irqsave(&priv->lock);
 
       /* Process all the timers in list */
 
@@ -366,7 +381,7 @@ static int rt_timer_thread(int argc, char *argv[])
 
           timer->state = RT_TIMER_IDLE;
 
-          leave_critical_section(flags);
+          spin_unlock_irqrestore(&priv->lock, flags);
 
           if (raw_state == RT_TIMER_TIMEOUT)
             {
@@ -379,7 +394,7 @@ static int rt_timer_thread(int argc, char *argv[])
 
           /* Enter critical section for next scanning list */
 
-          flags = enter_critical_section();
+          flags = spin_lock_irqsave(&priv->lock);
 
           if (raw_state == RT_TIMER_TIMEOUT)
             {
@@ -387,12 +402,12 @@ static int rt_timer_thread(int argc, char *argv[])
 
               if (timer->flags & RT_TIMER_REPEAT)
                 {
-                  start_rt_timer(timer, timer->timeout, true);
+                  start_rt_timer_nolock(timer, timer->timeout, true);
                 }
             }
         }
 
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->lock, flags);
     }
 
   return 0;
@@ -428,7 +443,7 @@ static int rt_timer_isr(int irq, void *context, void *arg)
 
   ESP32C3_TIM_ACKINT(priv->timer);
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
 
   /* Check if there is a timer running */
 
@@ -487,7 +502,7 @@ static int rt_timer_isr(int irq, void *context, void *arg)
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 
   return 0;
 }
@@ -643,7 +658,7 @@ uint64_t IRAM_ATTR rt_timer_get_alarm(void)
   struct esp32c3_rt_priv_s *priv = &g_rt_priv;
   uint64_t alarm_value = 0;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
 
   ESP32C3_TIM_GETCTR(priv->timer, &counter);
   counter = CYCLES_TO_USEC(counter);
@@ -659,7 +674,7 @@ uint64_t IRAM_ATTR rt_timer_get_alarm(void)
       alarm_value -= counter;
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 
   return alarm_value;
 }
@@ -684,13 +699,13 @@ void IRAM_ATTR rt_timer_calibration(uint64_t time_us)
   struct esp32c3_rt_priv_s *priv = &g_rt_priv;
   irqstate_t flags;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   ESP32C3_TIM_GETCTR(priv->timer, &counter);
   counter = CYCLES_TO_USEC(counter);
   counter += time_us;
   ESP32C3_TIM_SETCTR(priv->timer, USEC_TO_CYCLES(counter));
   ESP32C3_TIM_RLD_NOW(priv->timer);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -713,6 +728,7 @@ int esp32c3_rt_timer_init(void)
   irqstate_t flags;
   struct esp32c3_rt_priv_s *priv = &g_rt_priv;
 
+  spin_lock_init(&priv->lock);
   priv->timer = esp32c3_tim_init(ESP32C3_RT_TIMER);
   if (priv->timer == NULL)
     {
@@ -737,7 +753,7 @@ int esp32c3_rt_timer_init(void)
 
   priv->pid = (pid_t)pid;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
 
   /* ESP32-C3 hardware timer configuration:
    * 1 count = 1/16 us
@@ -754,7 +770,7 @@ int esp32c3_rt_timer_init(void)
   ESP32C3_TIM_ENABLEINT(priv->timer);
   ESP32C3_TIM_START(priv->timer);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 
   return 0;
 }
@@ -778,7 +794,7 @@ void esp32c3_rt_timer_deinit(void)
   irqstate_t flags;
   struct esp32c3_rt_priv_s *priv = &g_rt_priv;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
 
   ESP32C3_TIM_STOP(priv->timer);
   ESP32C3_TIM_DISABLEINT(priv->timer);
@@ -786,7 +802,7 @@ void esp32c3_rt_timer_deinit(void)
   esp32c3_tim_deinit(priv->timer);
   priv->timer = NULL;
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 
   if (priv->pid != INVALID_PROCESS_ID)
     {

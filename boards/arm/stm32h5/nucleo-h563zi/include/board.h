@@ -1,6 +1,8 @@
 /****************************************************************************
  * boards/arm/stm32h5/nucleo-h563zi/include/board.h
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -36,119 +38,121 @@
 
 /* Clocking *****************************************************************/
 
-/* The NUCLEO-H563ZI-Q supports both HSE and LSE crystals (X2 and X3).
- * However, as shipped, the X3 crystal is not populated.  Therefore the
- * Nucleo-H563ZI-Q will need to run off the 32MHz HSI clock, or the
- * 4 MHz CSI clock.  This configuration uses the HSI.
+/* The Nucleo-H563ZI-Q supports using a HSE crystal (X3). It is shipped with
+ * the crystal populated, but requires solder bridge configuration to enable
+ * it. Therefore, the Nucleo-H563ZI-Q will need to run off the 64MHz HSI
+ * clock, or the 4 MHz CSI clock. This configuration uses the HSI.
  *
- *   System Clock source : PLL (CSI)
- *   SYSCLK(Hz)          : 250000000   Determined by PLL1 configuration
- *   HCLK(Hz)            : 250000000    (STM32_RCC_CFGR_HPRE)  (Max 250MHz)
- *   AHB Prescaler       : 1            (STM32_RCC_CFGR_HPRE)  (Max 250MHz)
- *   APB1 Prescaler      : 1            (STM32_RCC_CFGR_PPRE1) (Max 250MHz)
- *   APB2 Prescaler      : 1            (STM32_RCC_CFGR_PPRE2) (Max 250MHz)
- *   CSI Frequency(Hz)   : 4000000      (nominal)
- *   PLL1M               : 2            (STM32_PLL1CFGR_PLLM)
- *   PLL1N               : 31           (STM32_PLL1CFGR_PLLN)
- *   PLL1P               : 2            (STM32_PLL1CFGR_PLLP)
- *   PLL1Q               : 0            (STM32_PLL1CFGR_PLLQ)
- *   PLL1R               : 1            (STM32_PLL1CFGR_PLLR)
- *   PLL2M               : 2            (STM32_PLL2CFGR_PLLM)
- *   PLL2N               : 15           (STM32_PLL2CFGR_PLLN)
- *   PLL2P               : 0            (STM32_PLL2CFGR_PLLP)
- *   PLL2Q               : 0            (STM32_PLL2CFGR_PLLQ)
- *   PLL2R               : 1            (STM32_PLL2CFGR_PLLR)
- *   PLL3M               : 2            (STM32_PLL3CFGR_PLLM)
- *   PLL3N               : 15           (STM32_PLL3CFGR_PLLN)
- *   PLL3P               : 0            (STM32_PLL3CFGR_PLLP)
- *   PLL3Q               : 0            (STM32_PLL3CFGR_PLLQ)
- *   PLL3R               : 1            (STM32_PLL3CFGR_PLLR)
- *   Flash Latency(WS)   : 5
- */
-
-/* HSI - 32 MHz RC factory-trimmed
- * LSI - 32 KHz RC
- * CSI - 4 MHz, autotrimmed via LSE
- * HSE - not installed
- * LSE - 32.768 kHz installed
- * SYSCLK = 250 MHz
+ *    System Clock Source : PLL1
+ *    SYSCLK Freq (MHz)   : 250
+ *    HCLK Freq   (MHz)   : 250
+ *    PLL1 Freq   (MHz)   : 250
+ *    Flash Latency (WS)  : 5
+ *
+ * NOTE : The STM32H5 requires PLL1P to be configured, as this is used as the
+ * system clock source. A custom clock config function must be supplied to
+ * use a different system clock source.
  */
 
 #define STM32_SYSCLK_FREQUENCY  250000000ul
-#define STM32_HSI_FREQUENCY      32000000ul
 #define STM32_LSI_FREQUENCY         32000
 #define STM32_LSE_FREQUENCY         32768
 
-#define STM32_BOARD_USEHSI       1
-#define STM32_CR_HSIDIV          RCC_CR_HSIDIV(1)
+#ifdef CONFIG_STM32H5_USE_HSE
 
-/* prescaler common to all PLL inputs */
+#define STM32_HSE_FREQUENCY     25000000ul
+#define STM32_BOARD_USEHSE
 
-/* 'main' PLL1 config; we use this to generate our system clock */
-
-/* Use 32 MHz HSI, set M to 2, N to 31, FRAC to 0x800 (2048), PLL1P to 2
- * SYSCLK = ((HSI / PLL1M) * (PLL1N + (PLL1FRACN/8192))) / PLL1P
- * SYSCLK = ((32000000 / 2) * (31 + (2048/8192))) / 2 = 250000000
+/* PLL1 config: Use to generate 250 MHz system clock
+ *  With HSE Freq = 25 MHz
  */
 
-#define STM32_PLL1CFGR_PLL1FRACEN        RCC_PLL1CFGR_PLL1FRACEN 
-#define STM32_PLL1CFGR_PLL1VCOSEL        0
-#define STM32_PLL1CFGR_PLL1RGE           RCC_PLL1CFGR_PLL1RGE_8_16M 
+#define STM32_PLLCFG_PLL1CFG     (RCC_PLL1CFGR_PLL1SRC_HSE  | \
+                                  RCC_PLL1CFGR_PLL1RGE_4_8M | \
+                                  RCC_PLL1CFGR_PLL1M(5) | \
+                                  RCC_PLL1CFGR_PLL1PEN | \
+                                  RCC_PLL1CFGR_PLL1QEN | \
+                                  RCC_PLL1CFGR_PLL1REN)
+#define STM32_PLLCFG_PLL1N        RCC_PLL1DIVR_PLL1N(100)
+#define STM32_PLLCFG_PLL1P        RCC_PLL1DIVR_PLL1P(2)
+#define STM32_PLLCFG_PLL1Q        RCC_PLL1DIVR_PLL1Q(2)
+#define STM32_PLLCFG_PLL1R        RCC_PLL1DIVR_PLL1R(2)
+#define STM32_PLLCFG_PLL1DIVR     (STM32_PLLCFG_PLL1N | \
+                                   STM32_PLLCFG_PLL1P | \
+                                   STM32_PLLCFG_PLL1Q | \
+                                   STM32_PLLCFG_PLL1R)
 
-#define STM32_PLL1CFGR_PLL1M             RCC_PLL1CFGR_PLL1M(2)
-#define STM32_PLL1DIVR_PLL1N             RCC_PLL1DIVR_PLL1N(31)
+#define STM32_VC01_FRQ            ((STM32_HSE_FREQUENCY / 5) * 100)
+#define STM32_PLL1P_FREQUENCY     (STM32_VCO1_FRQ / 2)
+#define STM32_PLL1Q_FREQUENCY     (STM32_VCO1_FRQ / 2)
+#define STM32_PLL1R_FREQUENCY     (STM32_VCO1_FRQ / 2)
 
-#define STM32_PLL1DIVR_PLL1P             RCC_PLL1DIVR_PLL1P(2)
-#define STM32_PLL1CFGR_PLL1P_ENABLED     1
-#define STM32_PLL1P_FREQUENCY            250000000
-#define STM32_PLL1DIVR_PLL1Q             0
-#undef STM32_PLL1CFGR_PLL1Q_ENABLED
-#define STM32_PLL1DIVR_PLL1R             0 
-#undef STM32_PLL1CFGR_PLL1R_ENABLED
+/* PLL2 config: Need to use for max ADC speed. */
 
-#define STM32_PLL1FRACR_PLL1FRACN        RCC_PLL1FRACR_PLL1FRACN(2048)
+#define STM32_PLLCFG_PLL2CFG      (RCC_PLL2CFGR_PLL2SRC_HSE | \
+                                   RCC_PLL2CFGR_PLL2RGE_4_8M | \
+                                   RCC_PLL2CFGR_PLL2M(5) | \
+                                   RCC_PLL2CFGR_PLL2REN)
+#define STM32_PLLCFG_PLL2N         RCC_PLL2DIVR_PLL2N(60)
+#define STM32_PLLCFG_PLL2R         RCC_PLL2DIVR_PLL2R(4)
+#define STM32_PLLCFG_PLL2DIVR     (STM32_PLLCFG_PLL2N | \
+                                   STM32_PLLCFG_PLL2R)
 
-/* PLL2 config */
+#define STM32_VCO2_FRQ            ((STM32_HSE_FREQUENCY / 5) * 60)
+#define STM32_PLL2R_FREQUENCY     (STM32_VCO2_FRQ / 4)
 
-#define STM32_PLL2CFGR_PLL2M             RCC_PLL2CFGR_PLL2M(4)
-#define STM32_PLL2CFGR_PLL2FRACEN        RCC_PLL2CFGR_PLL2FRACEN 
-#define STM32_PLL2CFGR_PLL2VCOSEL        RCC_PLL2CFGR_PLL2VCOSEL
-#define STM32_PLL2CFGR_PLL2RGE           RCC_PLL2CFGR_PLL2RGE_8_16M 
+#else
 
-#define STM32_PLL2DIVR_PLL2N             RCC_PLL2DIVR_PLL2N(15)
+#define STM32_BOARD_USEHSI       1
+#define STM32_BOARD_HSIDIV       RCC_CR_HSIDIV(1)
+#define STM32_HSI_FREQUENCY      32000000ul
 
-#define STM32_PLL2DIVR_PLL2P             RCC_PLL2DIVR_PLL2P(1)
-#define STM32_PLL2CFGR_PLL2P_ENABLED
-#define STM32_PLL2DIVR_PLL2Q             0
-#undef STM32_PLL2CFGR_PLL2Q_ENABLED
-#define STM32_PLL2DIVR_PLL2R             0 
-#undef STM32_PLL2CFGR_PLL2R_ENABLED
+/* PLL1 config: Used to generate system clock
+ *  PLL1DIVR expects N, P, Q, and R should be defined.
+ *  With HSI Freq = 32 MHz, this gives 250 MHz pll1_y_ck output
+ */
 
-#define STM32_PLL2FRACR_PLL2FRACN        RCC_PLL2FRACR_PLL2FRACN(5120)
+#define STM32_PLLCFG_PLL1CFG      (RCC_PLL1CFGR_PLL1SRC_HSI  | \
+                                   RCC_PLL1CFGR_PLL1RGE_4_8M | \
+                                   RCC_PLL1CFGR_PLL1M(8) | \
+                                   RCC_PLL1CFGR_PLL1PEN | \
+                                   RCC_PLL1CFGR_PLL1QEN | \
+                                   RCC_PLL1CFGR_PLL1REN)
+#define STM32_PLLCFG_PLL1N         RCC_PLL1DIVR_PLL1N(125)
+#define STM32_PLLCFG_PLL1P         RCC_PLL1DIVR_PLL1P(2)
+#define STM32_PLLCFG_PLL1Q         RCC_PLL1DIVR_PLL1Q(2)
+#define STM32_PLLCFG_PLL1R         RCC_PLL1DIVR_PLL1R(2)
+#define STM32_PLLCFG_PLL1DIVR     (STM32_PLLCFG_PLL1N | \
+                                   STM32_PLLCFG_PLL1P | \
+                                   STM32_PLLCFG_PLL1Q | \
+                                   STM32_PLLCFG_PLL1R)
 
-/* PLL3 config */
+#define STM32_VCO1_FRQ            ((STM32_HSI_FREQUENCY / 8) * 125)
+#define STM32_PLL1P_FREQUENCY     (STM32_VCO1_FRQ / 2)
+#define STM32_PLL1Q_FREQUENCY     (STM32_VCO1_FRQ / 2)
+#define STM32_PLL1R_FREQUENCY     (STM32_VCO1_FRQ / 2)
 
-#define STM32_PLL3CFGR_PLL3M             RCC_PLL3CFGR_PLL3M(4)
-#define STM32_PLL3CFGR_PLL3FRACEN        RCC_PLL3CFGR_PLL3FRACEN 
-#define STM32_PLL3CFGR_PLL3VCOSEL        RCC_PLL3CFGR_PLL3VCOSEL
-#define STM32_PLL3CFGR_PLL3RGE           RCC_PLL3CFGR_PLL3RGE_8_16M 
+/* PLL2 config: Needed to use 2 ADC at max speed. */
 
-#define STM32_PLL3DIVR_PLL3N             RCC_PLL3DIVR_PLL3N(15)
+#define STM32_PLLCFG_PLL2CFG      (RCC_PLL2CFGR_PLL2SRC_HSI | \
+                                   RCC_PLL2CFGR_PLL2RGE_4_8M | \
+                                   RCC_PLL2CFGR_PLL2M(8) | \
+                                   RCC_PLL2CFGR_PLL2REN)
+#define STM32_PLLCFG_PLL2N         RCC_PLL2DIVR_PLL2N(75)
+#define STM32_PLLCFG_PLL2R         RCC_PLL2DIVR_PLL2R(4)
+#define STM32_PLLCFG_PLL2DIVR     (STM32_PLLCFG_PLL2N | \
+                                   STM32_PLLCFG_PLL2R)
 
-#define STM32_PLL3DIVR_PLL3P             RCC_PLL3DIVR_PLL3P(1)
-#define STM32_PLL3CFGR_PLL3P_ENABLED
-#define STM32_PLL3DIVR_PLL3Q             0
-#undef STM32_PLL3CFGR_PLL3Q_ENABLED
-#define STM32_PLL3DIVR_PLL3R             0 
-#undef STM32_PLL3CFGR_PLL3R_ENABLED
+#define STM32_VCO2_FRQ            ((STM32_HSI_FREQUENCY / 8) * 75)
+#define STM32_PLL2R_FREQUENCY     (STM32_VCO2_FRQ / 4)
 
-#define STM32_PLL3FRACR_PLL3FRACN        RCC_PLL3FRACR_PLL3FRACN(5120)
+#endif /* CONFIG_STM32H5_USE_HSE*/
 
 /* Enable CLK48; get it from HSI48 */
 
 #if defined(CONFIG_STM32H5_USBFS) || defined(CONFIG_STM32H5_RNG)
 #  define STM32H5_USE_CLK48       1
-#  define STM32H5_CLKUSB_SEL      RCC_CCIPR4_USBSEL_HSI48KERCK 
+#  define STM32H5_CLKUSB_SEL      RCC_CCIPR4_USBSEL_HSI48KERCK
 #  define STM32H5_HSI48_SYNCSRC   SYNCSRC_NONE
 #endif
 
@@ -163,7 +167,7 @@
 
 /* Configure the APB1 prescaler */
 
-#define STM32_RCC_CFGR2_PPRE1     RCC_CFGR2_PPRE1_HCLK1       /* PCLK1 = HCLK / 1 */
+#define STM32_RCC_CFGR2_PPRE1     RCC_CFGR2_PPRE1_HCLK1      /* PCLK1 = HCLK / 1 */
 #define STM32_PCLK1_FREQUENCY    (STM32_HCLK_FREQUENCY / 1)
 
 #define STM32_APB1_TIM2_CLKIN    (STM32_PCLK1_FREQUENCY)
@@ -190,8 +194,8 @@
 
 /* Configure the APB3 prescaler */
 
-#define STM32_RCC_CFGR2_PPRE3    RCC_CFGR2_PPRE3_HCLK1       /* PCLK2 = HCLK / 1 */
-#define STM32_PCLK3_FREQUENCY   (STM32_HCLK_FREQUENCY / 1)
+#define STM32_RCC_CFGR2_PPRE3     RCC_CFGR2_PPRE3_HCLK1      /* PCLK2 = HCLK / 1 */
+#define STM32_PCLK3_FREQUENCY    (STM32_HCLK_FREQUENCY / 1)
 
 #define STM32_APB3_LPTIM1_CLKIN  (STM32_PCLK3_FREQUENCY)
 #define STM32_APB3_LPTIM3_CLKIN  (STM32_PCLK3_FREQUENCY)
@@ -225,9 +229,25 @@
 
 /* Configure the Kernel clocks */
 
-/* DMA Channel/Stream Selections ********************************************/
+/* Ethernet definitions *****************************************************/
 
-/* Alternate function pin selections ****************************************/
+#define GPIO_ETH_MDC          (GPIO_ETH_MDC_0 | GPIO_SPEED_100MHZ)          /* PC1 */
+#define GPIO_ETH_MDIO         (GPIO_ETH_MDIO_0 | GPIO_SPEED_100MHZ)         /* PA2 */
+#define GPIO_ETH_RMII_RXD0    (GPIO_ETH_RMII_RXD0_0 | GPIO_SPEED_100MHZ)    /* PC4 */
+#define GPIO_ETH_RMII_RXD1    (GPIO_ETH_RMII_RXD1_0 | GPIO_SPEED_100MHZ)    /* PC5 */
+#define GPIO_ETH_RMII_TXD0    (GPIO_ETH_RMII_TXD0_3 | GPIO_SPEED_100MHZ)    /* PG13 */
+#define GPIO_ETH_RMII_TXD1    (GPIO_ETH_RMII_TXD1_1 | GPIO_SPEED_100MHZ)    /* PB15 */
+#define GPIO_ETH_RMII_TX_EN   (GPIO_ETH_RMII_TX_EN_3 | GPIO_SPEED_100MHZ)   /* PG11 */
+#define GPIO_ETH_RMII_CRS_DV  (GPIO_ETH_RMII_CRS_DV_0 | GPIO_SPEED_100MHZ)  /* PA7 */
+#define GPIO_ETH_RMII_REF_CLK (GPIO_ETH_RMII_REF_CLK_0 | GPIO_SPEED_100MHZ) /* PA1 */
+
+/* ADC Clock Source *********************************************************/
+
+#define STM32_RCC_CCIPR5_ADCDACSEL RCC_CCIPR5_ADCDACSEL_PLL2RCK
+#define STM32_ADC_CLK_FREQUENCY    STM32_PLL2R_FREQUENCY
+
+#define GPIO_ADC1_IN3   (GPIO_ADC1_IN3_0)
+#define GPIO_ADC1_IN10  (GPIO_ADC1_IN10_0)
 
 /* USART3: Connected to Arduino connector D0/D1 (or to STLink VCP if solder
  * bridges SB123 to SB130 are re-worked accordingly).

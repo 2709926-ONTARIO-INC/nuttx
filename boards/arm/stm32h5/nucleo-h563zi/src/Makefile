@@ -1,6 +1,8 @@
 ##############################################################################
 # boards/arm/stm32h5/nucleo-h563zi/src/Makefile
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.  The
@@ -35,6 +37,10 @@ endif
 
 ifeq ($(CONFIG_BOARDCTL),y)
 CSRCS += stm32_appinit.c
+endif
+
+ifeq ($(CONFIG_ADC),y)
+CSRCS += stm32_adc.c
 endif
 
 include $(TOPDIR)/boards/Board.mk

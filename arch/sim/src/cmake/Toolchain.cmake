@@ -1,6 +1,8 @@
 # ##############################################################################
 # arch/sim/src/cmake/Toolchain.cmake
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
 # additional information regarding copyright ownership.  The ASF licenses this
@@ -86,11 +88,11 @@ if(CONFIG_STACK_USAGE_WARNING)
   add_compile_options(-Wstack-usage=${CONFIG_STACK_USAGE_WARNING})
 endif()
 
-if(CONFIG_SCHED_GCOV_ALL)
-  add_compile_options(-fprofile-generate -ftest-coverage)
+if(CONFIG_COVERAGE_ALL)
+  add_compile_options(-fprofile-arcs -ftest-coverage -fno-inline)
 endif()
 
-if(CONFIG_SCHED_GPROF_ALL OR CONFIG_SIM_GPROF)
+if(CONFIG_PROFILE_ALL OR CONFIG_SIM_PROFILE)
   add_compile_options(-pg)
 endif()
 
@@ -101,7 +103,7 @@ if(CONFIG_SIM_ASAN)
   add_compile_options(-fsanitize=pointer-compare)
   add_compile_options(-fsanitize=pointer-subtract)
   add_link_options(-fsanitize=address)
-elseif(CONFIG_MM_KASAN_ALL)
+elseif(CONFIG_MM_KASAN_INSTRUMENT_ALL)
   add_compile_options(-fsanitize=kernel-address)
 endif()
 
@@ -179,6 +181,9 @@ endif()
 if(CONFIG_SIM_M32)
   add_compile_options(-m32)
   add_link_options(-m32)
+elseif(NOT APPLE)
+  add_compile_options(-no-pie)
+  add_link_options(-Wl,-no-pie)
 endif()
 
 if(CONFIG_LIBCXX)
@@ -194,4 +199,8 @@ if(APPLE)
 else()
   add_link_options(-Wl,--gc-sections)
   add_link_options(-Wl,-Ttext-segment=0x40000000)
+endif()
+
+if(CONFIG_HOST_LINUX)
+  add_link_options(-Wl,-z,noexecstack)
 endif()

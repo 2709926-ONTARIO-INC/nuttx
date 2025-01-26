@@ -310,7 +310,6 @@ SYSCALL_LOOKUP(munmap,                     2)
 /* The following are defined if pthreads are enabled */
 
 #ifndef CONFIG_DISABLE_PTHREAD
-  SYSCALL_LOOKUP(pthread_barrier_wait,     1)
   SYSCALL_LOOKUP(pthread_cancel,           1)
   SYSCALL_LOOKUP(pthread_cond_broadcast,   1)
   SYSCALL_LOOKUP(pthread_cond_signal,      1)
@@ -390,8 +389,11 @@ SYSCALL_LOOKUP(nanosleep,                  2)
 
 /* I/O event notification facility */
 
+SYSCALL_LOOKUP(epoll_close,                1)
+SYSCALL_LOOKUP(epoll_create,               1)
 SYSCALL_LOOKUP(epoll_create1,              1)
 SYSCALL_LOOKUP(epoll_ctl,                  4)
+SYSCALL_LOOKUP(epoll_pwait,                5)
 SYSCALL_LOOKUP(epoll_wait,                 4)
 
 /* POSIX timers */

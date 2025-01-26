@@ -1,23 +1,16 @@
 /****************************************************************************
  * arch/arm/src/stm32f0l0g0/stm32_i2c.c
- * STM32 I2C IPv2 Hardware Layer - Device Driver ported from STM32F7
  *
- *   Copyright (C) 2011 Uros Platise. All rights reserved.
- *   Author: Uros Platise <uros.platise@isotel.eu>
- *
- * With extensions and modifications for the F1, F2, and F4 by:
- *
- *   Copyright (C) 2016-2017 Gregory Nutt. All rights reserved.
- *   Authors: Gregory Nutt <gnutt@nuttx.org>
- *            John Wharington
- *            David Sidrane <david_s5@nscdg.com>
- *            Bob Feretich <bob.feretich@rafresearch.com>
- *
- * Major rewrite of ISR and supporting methods, including support
- * for NACK and RELOAD by:
- *
- *   Copyright (c) 2016 Doug Vetter.  All rights reserved.
- *   Author: Doug Vetter <oss@aileronlabs.com>
+ * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-FileCopyrightText: 2011 Uros Platise. All rights reserved.
+ * SPDX-FileCopyrightText: 2016-2017 Gregory Nutt. All rights reserved.
+ * SPDX-FileCopyrightText: 2016 Doug Vetter.  All rights reserved.
+ * SPDX-FileContributor: Uros Platise <uros.platise@isotel.eu>
+ * SPDX-FileContributor: Gregory Nutt <gnutt@nuttx.org>
+ * SPDX-FileContributor: John Wharington
+ * SPDX-FileContributor: David Sidrane <david_s5@nscdg.com>
+ * SPDX-FileContributor: Bob Feretich <bob.feretich@rafresearch.com>
+ * SPDX-FileContributor: Doug Vetter <oss@aileronlabs.com>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -233,7 +226,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/kmalloc.h>
@@ -259,7 +252,7 @@
 
 #undef INVALID_CLOCK_SOURCE
 
-#warning TODO: check I2C clock source. It must be HSI!
+#warning TODO: check I2C clock source and clock frequency. It must be HSI!
 
 /* CONFIG_I2C_POLLED may be set so that I2C interrupts will not be used.
  * Instead, CPU-intensive polling will be used.
@@ -403,6 +396,7 @@ struct stm32_i2c_priv_s
   int refs;                    /* Reference count */
 
   mutex_t lock;                /* Mutual exclusion mutex */
+  spinlock_t spinlock;         /* Spinlock */
 #ifndef CONFIG_I2C_POLLED
   sem_t sem_isr;               /* Interrupt wait semaphore */
 #endif
@@ -515,6 +509,7 @@ static struct stm32_i2c_priv_s stm32_i2c1_priv =
   .config        = &stm32_i2c1_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -550,6 +545,7 @@ static struct stm32_i2c_priv_s stm32_i2c2_priv =
   .config        = &stm32_i2c2_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -585,6 +581,7 @@ static struct stm32_i2c_priv_s stm32_i2c3_priv =
   .config        = &stm32_i2c3_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -620,6 +617,7 @@ static struct stm32_i2c_priv_s stm32_i2c4_priv =
   .config        = &stm32_i2c4_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -786,7 +784,7 @@ static inline int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
   irqstate_t flags;
   int ret;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   /* Enable I2C interrupts */
 
@@ -803,6 +801,8 @@ static inline int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
   priv->intstate = INTSTATE_WAITING;
   do
     {
+      spin_unlock_irqrestore(&priv->spinlock, flags);
+
       /* Wait until either the transfer is complete or the timeout expires */
 
 #ifdef CONFIG_STM32F0L0G0_I2C_DYNTIMEO
@@ -821,6 +821,8 @@ static inline int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
 
           break;
         }
+
+      flags = spin_lock_irqsave(&priv->spinlock);
     }
 
   /* Loop until the interrupt level transfer is complete. */
@@ -835,7 +837,7 @@ static inline int stm32_i2c_sem_waitdone(struct stm32_i2c_priv_s *priv)
 
   stm32_i2c_modifyreg32(priv, STM32_I2C_CR1_OFFSET, I2C_CR1_ALLINTS, 0);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
   return ret;
 }
 #else
@@ -1737,7 +1739,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
            */
 
 #ifdef CONFIG_I2C_POLLED
-          irqstate_t state = enter_critical_section();
+          irqstate_t state = spin_lock_irqsave(&priv->spinlock);
 #endif
           /* Receive a byte */
 
@@ -1754,7 +1756,7 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
           priv->dcnt--;
 
 #ifdef CONFIG_I2C_POLLED
-          leave_critical_section(state);
+          spin_unlock_irqrestore(&priv->spinlock, state);
 #endif
         }
       else
@@ -1991,9 +1993,9 @@ static int stm32_i2c_isr_process(struct stm32_i2c_priv_s *priv)
               i2cinfo("TCR: DISABLE RELOAD: NBYTES = dcnt = %i msgc = %i\n",
                       priv->dcnt, priv->msgc);
 
-              stm32_i2c_disable_reload(priv);
-
               stm32_i2c_set_bytes_to_transfer(priv, priv->dcnt);
+
+              stm32_i2c_disable_reload(priv);
             }
 
           i2cinfo("TCR: EXIT dcnt = %i msgc = %i status 0x%08" PRIx32 "\n",
@@ -2708,13 +2710,6 @@ struct i2c_master_s *stm32_i2cbus_initialize(int port)
 {
   struct stm32_i2c_priv_s *priv = NULL;  /* private data of device with multiple instances */
   struct stm32_i2c_inst_s *inst = NULL;  /* device, single instance */
-
-#if 0                           /* REVISIT: this is not true for all STM32 M0 */
-#if STM32_HSI_FREQUENCY != 8000000 || defined(INVALID_CLOCK_SOURCE)
-#  warning STM32_I2C_INIT: Peripheral clock is HSI and it must be 16mHz or the speed/timing calculations need to be redone.
-  return NULL;
-#endif
-#endif
 
   /* Get I2C private structure */
 

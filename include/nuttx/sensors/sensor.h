@@ -532,13 +532,6 @@ struct sensor_lowerhalf_s
 
   uint32_t nbuffer;
 
-  /* The uncalibrated use to describe whether the sensor event is
-   * uncalibrated. True is uncalibrated data, false is calibrated data,
-   * default false.
-   */
-
-  bool uncalibrated;
-
   /* The lower half sensor driver operations */
 
   FAR const struct sensor_ops_s *ops;
@@ -560,6 +553,7 @@ struct sensor_lowerhalf_s
        * Returned Value:
        *   The bytes of push is returned when success;
        *   A negated errno value is returned on any failure.
+       *
        **********************************************************************/
 
       sensor_push_event_t push_event;
@@ -576,6 +570,7 @@ struct sensor_lowerhalf_s
        *
        * Input Parameters:
        *   priv   - Upper half driver handle
+       *
        **********************************************************************/
 
       sensor_notify_event_t notify_event;
@@ -589,6 +584,7 @@ struct sensor_lowerhalf_s
  *
  * Input Parameters:
  *   priv   - Upper half driver handle
+ *
  ****************************************************************************/
 
   CODE void (*sensor_lock)(FAR void * priv);
@@ -707,6 +703,7 @@ int sensor_custom_register(FAR struct sensor_lowerhalf_s *dev,
  *           instance is bound to the sensor driver and must persists as long
  *           as the driver persists.
  *   devno - The user specifies which device of this type, from 0.
+ *
  ****************************************************************************/
 
 void sensor_unregister(FAR struct sensor_lowerhalf_s *dev, int devno);
@@ -723,6 +720,7 @@ void sensor_unregister(FAR struct sensor_lowerhalf_s *dev, int devno);
  *           instance is bound to the sensor driver and must persists as long
  *           as the driver persists.
  *   path  - The user specifies path of device, ex: /dev/uorb/xxx
+ *
  ****************************************************************************/
 
 void sensor_custom_unregister(FAR struct sensor_lowerhalf_s *dev,
@@ -735,6 +733,7 @@ void sensor_custom_unregister(FAR struct sensor_lowerhalf_s *dev,
  *   This function registers usensor character node "/dev/usensor", so that
  *   application can register user sensor by this node. The node will
  *   manager all user sensor in this character dirver.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_USENSOR
@@ -754,6 +753,7 @@ int usensor_initialize(void);
  *
  * Returned Value:
  *   The takeover rpmsg lowerhalf returned on success, NULL on failure.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_SENSORS_RPMSG
@@ -772,6 +772,7 @@ FAR struct sensor_lowerhalf_s *sensor_rpmsg_register(
  *
  * Input Parameters:
  *   lower - The instance of lower half sensor driver.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_SENSORS_RPMSG
@@ -787,6 +788,7 @@ void sensor_rpmsg_unregister(FAR struct sensor_lowerhalf_s *lower);
  *
  * Returned Value:
  *   OK on success; A negated errno value is returned on any failure.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_SENSORS_RPMSG

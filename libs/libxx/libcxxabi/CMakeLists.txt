@@ -52,15 +52,16 @@ if(CONFIG_LIBCXXABI)
     endif()
   endif()
 
+  nuttx_create_symlink(${CMAKE_CURRENT_LIST_DIR}/libcxxabi/include
+                       ${CMAKE_BINARY_DIR}/include/libcxxabi)
+
   set_property(
     TARGET nuttx
     APPEND
     PROPERTY NUTTX_CXX_INCLUDE_DIRECTORIES
-             ${CMAKE_CURRENT_LIST_DIR}/libcxxabi/include)
+             ${CMAKE_BINARY_DIR}/include/libcxxabi)
 
   nuttx_add_system_library(libcxxabi)
-
-  set(SRCS)
 
   # C++ABI files
   list(
@@ -75,7 +76,14 @@ if(CONFIG_LIBCXXABI)
     cxa_thread_atexit.cpp
     cxa_vector.cpp
     cxa_virtual.cpp)
+  add_compile_definitions(_LIBCPP_BUILDING_LIBRARY)
+  if(CONFIG_LIBSUPCXX_TOOLCHAIN)
+    add_compile_definitions(__GLIBCXX__)
+  endif()
 
+  if(CONFIG_LIBSUPCXX)
+    add_compile_definitions(__GLIBCXX__)
+  endif()
   # C++ STL files
   list(APPEND SRCS stdlib_exception.cpp stdlib_new_delete.cpp
        stdlib_stdexcept.cpp stdlib_typeinfo.cpp)
@@ -90,8 +98,6 @@ if(CONFIG_LIBCXXABI)
   if(CONFIG_LIBCXXABI)
     add_compile_definitions(LIBCXX_BUILDING_LIBCXXABI)
   endif()
-
-  set(TARGET_SRCS)
 
   foreach(src ${SRCS})
     string(PREPEND src libcxxabi/src/)
@@ -120,6 +126,6 @@ if(CONFIG_LIBCXXABI)
 
   target_sources(libcxxabi PRIVATE ${TARGET_SRCS})
   target_include_directories(
-    libcxxabi BEFORE PRIVATE ${CMAKE_CURRENT_LIST_DIR}/libcxxabi/include
-                             ${CMAKE_CURRENT_LIST_DIR}/libcxx/src)
+    libcxxabi BEFORE PRIVATE ${NUTTX_DIR}/libs/libxx/libcxx/libcxx/src
+                             ${CMAKE_CURRENT_LIST_DIR}/libcxxabi/include)
 endif()

@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/efm32/efm32_usbdev.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -41,6 +43,7 @@
 #include <nuttx/usb/usbdev_trace.h>
 
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -453,6 +456,10 @@ struct efm32_usbdev_s
 
   struct efm32_ep_s       epin[EFM32_NENDPOINTS];
   struct efm32_ep_s       epout[EFM32_NENDPOINTS];
+
+  /* Spinlock */
+
+  spinlock_t              lock;
 };
 
 /****************************************************************************
@@ -4121,7 +4128,7 @@ static void efm32_epout_disable(struct efm32_ep_s *privep)
    * Global OUT NAK mode in the core.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   efm32_enablegonak(privep);
 
   /* Disable the required OUT endpoint by setting the EPDIS and SNAK bits
@@ -4168,7 +4175,7 @@ static void efm32_epout_disable(struct efm32_ep_s *privep)
 
   efm32_req_cancel(privep, -ESHUTDOWN);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
 }
 
 /****************************************************************************
@@ -4233,7 +4240,7 @@ static void efm32_epin_disable(struct efm32_ep_s *privep)
    * the DIEPCTLx register.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   regaddr = EFM32_USB_DIEPCTL(privep->epphy);
   regval  = efm32_getreg(regaddr);
   regval &= ~USB_DIEPCTL_USBACTEP;
@@ -4264,7 +4271,7 @@ static void efm32_epin_disable(struct efm32_ep_s *privep)
   /* Cancel any queued write requests */
 
   efm32_req_cancel(privep, -ESHUTDOWN);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
 }
 
 /****************************************************************************
@@ -4455,7 +4462,7 @@ static int efm32_ep_submit(struct usbdev_ep_s *ep,
 
   /* Disable Interrupts */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
 
   /* If we are stalled, then drop all requests on the floor */
 
@@ -4500,7 +4507,7 @@ static int efm32_ep_submit(struct usbdev_ep_s *ep,
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return ret;
 }
 
@@ -4528,7 +4535,7 @@ static int efm32_ep_cancel(struct usbdev_ep_s *ep,
 
   usbtrace(TRACE_EPCANCEL, privep->epphy);
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
 
   /* FIXME: if the request is the first, then we need to flush the EP
    *         otherwise just remove it from the list
@@ -4537,7 +4544,7 @@ static int efm32_ep_cancel(struct usbdev_ep_s *ep,
    */
 
   efm32_req_cancel(privep, -ESHUTDOWN);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
   return OK;
 }
 
@@ -4747,7 +4754,7 @@ static int efm32_ep_stall(struct usbdev_ep_s *ep, bool resume)
 
   /* Set or clear the stall condition as requested */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   if (resume)
     {
       ret = efm32_ep_clrstall(privep);
@@ -4757,7 +4764,7 @@ static int efm32_ep_stall(struct usbdev_ep_s *ep, bool resume)
       ret = efm32_ep_setstall(privep);
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
 
   return ret;
 }
@@ -4817,7 +4824,7 @@ static struct usbdev_ep_s *efm32_ep_alloc(struct usbdev_s *dev,
 
   /* Get the set of available endpoints depending on the direction */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   epavail = priv->epavail[in];
 
   /* A physical address of 0 means that any endpoint will do */
@@ -4864,7 +4871,7 @@ static struct usbdev_ep_s *efm32_ep_alloc(struct usbdev_s *dev,
 
               /* And return the pointer to the standard endpoint structure */
 
-              leave_critical_section(flags);
+              spin_unlock_irqrestore(&priv->lock, flags);
               return in ? &priv->epin[epno].ep : &priv->epout[epno].ep;
             }
         }
@@ -4873,7 +4880,7 @@ static struct usbdev_ep_s *efm32_ep_alloc(struct usbdev_s *dev,
     }
 
   usbtrace(TRACE_DEVERROR(EFM32_TRACEERR_NOEP), (uint16_t)eplog);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return NULL;
 }
 
@@ -4898,9 +4905,9 @@ static void efm32_ep_free(struct usbdev_s *dev,
     {
       /* Mark the endpoint as available */
 
-      flags = enter_critical_section();
+      flags = spin_lock_irqsave(&priv->lock);
       priv->epavail[privep->isin] |= (1 << privep->epphy);
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->lock, flags);
     }
 }
 
@@ -4942,7 +4949,7 @@ static int efm32_wakeup(struct usbdev_s *dev)
 
   /* Is wakeup enabled? */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   if (priv->wakeup)
     {
       /* Yes... is the core suspended? */
@@ -4968,7 +4975,7 @@ static int efm32_wakeup(struct usbdev_s *dev)
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return OK;
 }
 
@@ -5006,13 +5013,12 @@ static int efm32_selfpowered(struct usbdev_s *dev, bool selfpowered)
  *
  ****************************************************************************/
 
-static int efm32_pullup(struct usbdev_s *dev, bool enable)
+static int efm32_pullup_nolock(struct usbdev_s *dev, bool enable)
 {
   uint32_t regval;
 
   usbtrace(TRACE_DEVPULLUP, (uint16_t)enable);
 
-  irqstate_t flags = enter_critical_section();
   regval = efm32_getreg(EFM32_USB_DCTL);
   if (enable)
     {
@@ -5032,8 +5038,20 @@ static int efm32_pullup(struct usbdev_s *dev, bool enable)
     }
 
   efm32_putreg(regval, EFM32_USB_DCTL);
-  leave_critical_section(flags);
+
   return OK;
+}
+
+static int efm32_pullup(struct usbdev_s *dev, bool enable)
+{
+  uint32_t ret;
+  struct efm32_usbdev_s *priv = (struct efm32_usbdev_s *)dev;
+
+  irqstate_t flags = spin_lock_irqsave(&priv->lock);
+  ret = efm32_pullup_nolock(dev, enable);
+  spin_unlock_irqrestore(&priv->lock, flags);
+
+  return ret;
 }
 
 /****************************************************************************
@@ -5583,6 +5601,10 @@ void arm_usbinitialize(void)
    *  10. Start initializing the USB core ...
    */
 
+  /* Initialize driver lock */
+
+  spin_lock_init(&priv->lock);
+
   /* Uninitialize the hardware so that we know that we are starting from a
    * known state.
    */
@@ -5655,8 +5677,8 @@ void arm_usbuninitialize(void)
 
   /* Disconnect device */
 
-  flags = enter_critical_section();
-  efm32_pullup(&priv->usbdev, false);
+  flags = spin_lock_irqsave(&priv->lock);
+  efm32_pullup_nolock(&priv->usbdev, false);
   priv->usbdev.speed = USB_SPEED_UNKNOWN;
 
   /* Disable and detach IRQs */
@@ -5691,7 +5713,7 @@ void arm_usbuninitialize(void)
   /* TODO: Turn off USB power and clocking */
 
   priv->devstate = DEVSTATE_DEFAULT;
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 }
 
 /****************************************************************************
@@ -5802,9 +5824,9 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
    * canceled while the class driver is still bound.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   efm32_usbreset(priv);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 
   /* Unbind the class driver */
 
@@ -5812,17 +5834,17 @@ int usbdev_unregister(struct usbdevclass_driver_s *driver)
 
   /* Disable USB controller interrupts */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   up_disable_irq(EFM32_IRQ_USB);
 
   /* Disconnect device */
 
-  efm32_pullup(&priv->usbdev, false);
+  efm32_pullup_nolock(&priv->usbdev, false);
 
   /* Unhook the driver */
 
   priv->driver = NULL;
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
 
   return OK;
 }

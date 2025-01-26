@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/tms570/tms570_gioirq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -32,7 +34,7 @@
 #include <nuttx/init.h>
 #include <nuttx/arch.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <arch/board/board.h>
 
 #include "arm_internal.h"
@@ -40,6 +42,12 @@
 #include "hardware/tms570_gio.h"
 
 #ifdef CONFIG_TMS570_GIO_IRQ
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+static spinlock_t g_irq_lock = SP_UNLOCKED;
 
 /****************************************************************************
  * Private Functions
@@ -130,7 +138,7 @@ void tms570_gioirq(gio_pinset_t pinset)
 
   if ((pinset & GIO_MODE_MASK) == GIO_INPUT && port < TMS570_NIRQPORTS)
     {
-      flags = enter_critical_section();
+      flags = spin_lock_irqsave(&g_irq_lock);
       switch (pinset & GIO_INT_MASK)
       {
         case GIO_INT_NONE:
@@ -180,7 +188,7 @@ void tms570_gioirq(gio_pinset_t pinset)
           break;
         }
 
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&g_irq_lock, flags);
     }
 }
 

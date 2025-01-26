@@ -133,10 +133,6 @@ ifeq ($(CONFIG_SMP),y)
 CHIP_CSRCS += esp32_cpuidlestack.c esp32_cpustart.c esp32_intercpu_interrupt.c
 endif
 
-ifeq ($(CONFIG_ARCH_HAVE_MULTICPU),y)
-CHIP_ASRCS  = esp32_cpuindex.S
-endif
-
 ifeq ($(CONFIG_ESP32_UART),y)
 CHIP_CSRCS += esp32_serial.c
 endif
@@ -218,7 +214,7 @@ endif
 
 ESP_HAL_3RDPARTY_REPO   = esp-hal-3rdparty
 ifndef ESP_HAL_3RDPARTY_VERSION
-	ESP_HAL_3RDPARTY_VERSION = e3899a2324c8e326db20f99f208e890fdd7a5b92
+	ESP_HAL_3RDPARTY_VERSION = 87ccbf88b6fd490dae1993524e70f51bb2ea181d
 endif
 
 ifndef ESP_HAL_3RDPARTY_URL

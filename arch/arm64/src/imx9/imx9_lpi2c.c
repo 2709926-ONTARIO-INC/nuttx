@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm64/src/imx9/imx9_lpi2c.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -36,6 +38,7 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/clock.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
@@ -204,6 +207,7 @@ struct imx9_lpi2c_priv_s
 
   int refs;                    /* Reference count */
   mutex_t lock;                /* Mutual exclusion mutex */
+  spinlock_t spinlock;         /* Spinlock */
 #ifndef CONFIG_I2C_POLLED
   sem_t sem_isr;               /* Interrupt wait semaphore */
 #endif
@@ -362,6 +366,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c1_priv =
   .config        = &imx9_lpi2c1_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -410,6 +415,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c2_priv =
   .config        = &imx9_lpi2c2_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -458,6 +464,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c3_priv =
   .config        = &imx9_lpi2c3_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -506,6 +513,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c4_priv =
   .config        = &imx9_lpi2c4_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -554,6 +562,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c5_priv =
   .config        = &imx9_lpi2c5_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -602,6 +611,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c6_priv =
   .config        = &imx9_lpi2c6_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -650,6 +660,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c7_priv =
   .config        = &imx9_lpi2c7_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -698,6 +709,7 @@ static struct imx9_lpi2c_priv_s imx9_lpi2c8_priv =
   .config        = &imx9_lpi2c8_config,
   .refs          = 0,
   .lock          = NXMUTEX_INITIALIZER,
+  .spinlock      = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr       = SEM_INITIALIZER(0),
 #endif
@@ -1110,7 +1122,7 @@ static void imx9_lpi2c_setclock(struct imx9_lpi2c_priv_s *priv,
           imx9_get_rootclock(priv->config->clk_root, &src_freq);
 
           /* LPI2C output frequency = (Source Clock (Hz)/ 2^prescale) /
-           *   (CLKLO + 1 + CLKHI + 1 + ROUNDDOWN((2 + FILTSCL) / 2^prescale)
+           *   (CLKLO + 1 + CLKHI + 1 + ALIGN_DOWN((2 + FILTSCL)/2^prescale)
            *
            * Assume  CLKLO = 2 * CLKHI, SETHOLD = CLKHI, DATAVD = CLKHI / 2
            */
@@ -1311,14 +1323,10 @@ static int imx9_lpi2c_start_message(struct imx9_lpi2c_priv_s *priv)
   priv->dcnt  = priv->msgv->length;
   priv->flags = priv->msgv->flags;
 
-  /* Enable RX interrupt before sending START in order not to miss it */
+  /* Disable ABORT which may be present after errors */
 
-  if ((priv->flags & I2C_M_READ) != 0)
-    {
-      irq_config |= LPI2C_MIER_RDIE;
-    }
-
-  imx9_lpi2c_putreg(priv, IMX9_LPI2C_MIER_OFFSET, irq_config);
+  imx9_lpi2c_modifyreg(priv, IMX9_LPI2C_MCFGR0_OFFSET,
+                       LPI2C_MCFG0_ABORT, 0);
 
   /* Send start + address unless M_NOSTART is defined */
 
@@ -1331,27 +1339,22 @@ static int imx9_lpi2c_start_message(struct imx9_lpi2c_priv_s *priv)
   else
     {
       imx9_lpi2c_traceevent(priv, I2CEVENT_NOSTART, priv->msgc);
-
-      if ((priv->flags & I2C_M_READ) == 0)
-        {
-          /* We didn't send start, send the first byte to trigger TX IRQs */
-
-          imx9_lpi2c_putreg(priv, IMX9_LPI2C_MTDR_OFFSET,
-                            LPI2C_MTDR_CMD_TXD |
-                            LPI2C_MTDR_DATA(*priv->ptr++));
-          priv->dcnt--;
-        }
     }
-
-  /* Enable TX interrupt after sending the first byte - before sending
-   * anything the FIFO count is at 0, so the TX interrupt would trigger
-   * right away
-   */
 
   if ((priv->flags & I2C_M_READ) == 0)
     {
+      /* Queue the first byte. NB: if start was sent and NACK received,
+       * the byte won't be sent out to the bus.
+       */
+
+      imx9_lpi2c_putreg(priv, IMX9_LPI2C_MTDR_OFFSET,
+                        LPI2C_MTDR_CMD_TXD |
+                        LPI2C_MTDR_DATA(*priv->ptr++));
+      priv->dcnt--;
+
+      /* Enable TX interrupt */
+
       irq_config |= LPI2C_MIER_TDIE;
-      imx9_lpi2c_putreg(priv, IMX9_LPI2C_MIER_OFFSET, irq_config);
     }
   else
     {
@@ -1360,7 +1363,13 @@ static int imx9_lpi2c_start_message(struct imx9_lpi2c_priv_s *priv)
       imx9_lpi2c_putreg(priv, IMX9_LPI2C_MTDR_OFFSET,
                         LPI2C_MTDR_CMD_RXD |
                         LPI2C_MTDR_DATA((priv->dcnt - 1)));
+
+      /* Enable RX interrupt */
+
+      irq_config |= LPI2C_MIER_RDIE;
     }
+
+  imx9_lpi2c_putreg(priv, IMX9_LPI2C_MIER_OFFSET, irq_config);
 
   return OK;
 }
@@ -1488,9 +1497,10 @@ static int imx9_lpi2c_isr_process(struct imx9_lpi2c_priv_s *priv)
 
   /* Ignore NACK on RX last byte - this is normal */
 
-  if ((status & LPI2C_MSR_NDF) != 0 && (priv->flags & I2C_M_READ) != 0 &&
-      priv->dcnt == 1)
+  if ((status & (LPI2C_MSR_RDF | LPI2C_MSR_NDF)) ==
+      (LPI2C_MSR_RDF | LPI2C_MSR_NDF) && priv->dcnt == 1)
     {
+      imx9_lpi2c_putreg(priv, IMX9_LPI2C_MSR_OFFSET, LPI2C_MSR_NDF);
       status &= ~LPI2C_MSR_NDF;
     }
 
@@ -1510,23 +1520,32 @@ static int imx9_lpi2c_isr_process(struct imx9_lpi2c_priv_s *priv)
       imx9_lpi2c_putreg(priv, IMX9_LPI2C_MSR_OFFSET,
                         status & LPI2C_MSR_ERROR_MASK);
 
-      priv->status = status;
-      priv->msgc = 0;
-      priv->dcnt = 0;
-
-      /* If there is no stop condition on the bus after clearing the error,
-       * send stop. Otherwise stop the transfer now.
+      /* If there is no stop condition on the bus, abort (send stop).
+       * Otherwise stop the transfer now.
        */
 
-      status = imx9_lpi2c_getstatus(priv);
       if ((status & LPI2C_MSR_SDF) == 0)
         {
-          imx9_lpi2c_sendstop(priv);
+          /* Disable RX and TX interrupts */
+
+          imx9_lpi2c_modifyreg(priv, IMX9_LPI2C_MIER_OFFSET,
+                               LPI2C_MIER_TDIE | LPI2C_MIER_TDIE, 0);
+
+          /* Abort any ongoing transfer, this also sends stop on the bus */
+
+          imx9_lpi2c_modifyreg(priv, IMX9_LPI2C_MCFGR0_OFFSET, 0,
+                               LPI2C_MCFG0_ABORT);
         }
       else
         {
           imx9_lpi2c_stop_transfer(priv);
         }
+
+      /* Mark that there are no more messages to process */
+
+      priv->status = status;
+      priv->msgc = 0;
+      priv->dcnt = 0;
 
       return OK;
     }
@@ -1586,7 +1605,7 @@ static int imx9_lpi2c_isr_process(struct imx9_lpi2c_priv_s *priv)
        */
 
 #ifdef CONFIG_I2C_POLLED
-      irqstate_t flags = enter_critical_section();
+      irqstate_t flags = spin_lock_irqsave(&priv->spinlock);
 #endif
 
       /* Receive a byte */
@@ -1601,7 +1620,7 @@ static int imx9_lpi2c_isr_process(struct imx9_lpi2c_priv_s *priv)
         }
 
 #ifdef CONFIG_I2C_POLLED
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->spinlock, flags);
 #endif
     }
 
@@ -2083,6 +2102,24 @@ static int imx9_lpi2c_transfer(struct i2c_master_s *dev,
       ret = -ETIMEDOUT;
       i2cerr("ERROR: Timed out: MSR: status: 0x0%" PRIx32 "\n",
              priv->status);
+
+      /* Stop the ongoing transfer and clear the FIFOs */
+
+      imx9_lpi2c_stop_transfer(priv);
+
+      imx9_lpi2c_modifyreg(priv, IMX9_LPI2C_MCR_OFFSET, 0,
+                           LPI2C_MCR_RTF | LPI2C_MCR_RRF);
+
+      /* Clear any errors */
+
+      imx9_lpi2c_putreg(priv, IMX9_LPI2C_MSR_OFFSET, LPI2C_MSR_ERROR_MASK);
+
+      /* Reset the semaphore. There is a race between interrupts and
+       * sem_waitdone, and the semaphore is anyhow posted one extra time in
+       * imx9_lpi2c_stop_transfer above
+       */
+
+      nxsem_reset(&priv->sem_isr, 0);
     }
 
   /* Check for error status conditions */
@@ -2109,7 +2146,7 @@ static int imx9_lpi2c_transfer(struct i2c_master_s *dev,
         {
           /* FIFO Error */
 
-          i2cerr("Transfer without start condition\n");
+          i2cerr("FIFO error\n");
           ret = -EINVAL;
         }
     }
@@ -2349,7 +2386,7 @@ struct i2c_master_s *imx9_i2cbus_initialize(int port)
    * power-up hardware and configure GPIOs.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   if ((volatile int)priv->refs++ == 0)
     {
@@ -2358,19 +2395,23 @@ struct i2c_master_s *imx9_i2cbus_initialize(int port)
 #ifdef CONFIG_IMX9_LPI2C_DMA
       if (priv->config->dma_txreqsrc != 0)
         {
+          spin_unlock_irqrestore(&priv->spinlock, flags);
           priv->txdma = imx9_dmach_alloc(priv->config->dma_txreqsrc, 0);
+          flags = spin_lock_irqsave(&priv->spinlock);
           DEBUGASSERT(priv->txdma != NULL);
         }
 
       if (priv->config->dma_rxreqsrc != 0)
         {
+          spin_unlock_irqrestore(&priv->spinlock, flags);
           priv->rxdma = imx9_dmach_alloc(priv->config->dma_rxreqsrc, 0);
+          flags = spin_lock_irqsave(&priv->spinlock);
           DEBUGASSERT(priv->rxdma != NULL);
         }
 #endif
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 
   return (struct i2c_master_s *)priv;
 }
@@ -2397,15 +2438,15 @@ int imx9_i2cbus_uninitialize(struct i2c_master_s *dev)
       return ERROR;
     }
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   if (--priv->refs > 0)
     {
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->spinlock, flags);
       return OK;
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 
   /* Disable power and other HW resource (GPIO's) */
 

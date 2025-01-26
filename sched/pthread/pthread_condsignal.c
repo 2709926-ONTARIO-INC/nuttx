@@ -30,6 +30,8 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/atomic.h>
+
 #include "pthread/pthread.h"
 
 /****************************************************************************
@@ -64,11 +66,16 @@ int pthread_cond_signal(FAR pthread_cond_t *cond)
     }
   else
     {
-      if (cond->lock_count < 0)
+      int wcnt = atomic_read(COND_WAIT_COUNT(cond));
+
+      while (wcnt > 0)
         {
-          sinfo("Signalling...\n");
-          cond->lock_count++;
-          ret = -nxsem_post(&cond->sem);
+          if (atomic_cmpxchg(COND_WAIT_COUNT(cond), &wcnt, wcnt - 1))
+            {
+              sinfo("Signalling...\n");
+              ret = -nxsem_post(&cond->sem);
+              break;
+            }
         }
     }
 

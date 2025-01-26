@@ -30,7 +30,7 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/arch.h>
 #include <nuttx/board.h>
 #include <nuttx/kmalloc.h>
@@ -203,6 +203,10 @@ static const uint32_t g_priority[5] =
 
 static uint64_t g_iram_count[NR_IRQS];
 #endif
+
+/* Spinlock */
+
+static spinlock_t g_irq_lock = SP_UNLOCKED;
 
 /****************************************************************************
  * Private Functions
@@ -445,11 +449,11 @@ static void esp32s3_free_cpuint(int cpuint)
 
 void esp32s3_irq_iram_interrupt_record(int irq)
 {
-  irqstate_t flags = enter_critical_section();
+  irqstate_t flags = spin_lock_irqsave(&g_irq_lock);
 
   g_iram_count[irq]++;
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_irq_lock, flags);
 }
 #endif
 
@@ -528,11 +532,7 @@ void up_irqinitialize(void)
 
   /* Attach the software interrupt */
 
-  irq_attach(XTENSA_IRQ_SWINT, (xcpt_t)xtensa_swint, NULL);
-
-  /* Enable the software CPU interrupt. */
-
-  up_enable_irq(XTENSA_IRQ_SWINT);
+  irq_attach(XTENSA_IRQ_SYSCALL, xtensa_swint, NULL);
 }
 
 /****************************************************************************
@@ -814,7 +814,7 @@ int esp32s3_setup_irq(int cpu, int periphid, int priority, int flags)
       return -EINVAL;
     }
 
-  irqstate = enter_critical_section();
+  irqstate = spin_lock_irqsave(&g_irq_lock);
 
   /* Setting up an IRQ includes the following steps:
    *    1. Allocate a CPU interrupt.
@@ -828,7 +828,7 @@ int esp32s3_setup_irq(int cpu, int periphid, int priority, int flags)
     {
       irqerr("Unable to allocate CPU interrupt for priority=%d and flags=%d",
              priority, flags);
-      leave_critical_section(irqstate);
+      spin_unlock_irqrestore(&g_irq_lock, irqstate);
 
       return cpuint;
     }
@@ -856,7 +856,7 @@ int esp32s3_setup_irq(int cpu, int periphid, int priority, int flags)
 
   putreg32(cpuint, regaddr);
 
-  leave_critical_section(irqstate);
+  spin_unlock_irqrestore(&g_irq_lock, irqstate);
 
   return cpuint;
 }
@@ -883,12 +883,12 @@ int esp32s3_setup_irq(int cpu, int periphid, int priority, int flags)
 
 void esp32s3_teardown_irq(int cpu, int periphid, int cpuint)
 {
-  irqstate_t irqstate;
+  irqstate_t flags;
   uintptr_t regaddr;
   uint8_t *intmap;
   int irq;
 
-  irqstate = enter_critical_section();
+  flags = spin_lock_irqsave(&g_irq_lock);
 
   /* Tearing down an IRQ includes the following steps:
    *   1. Free the previously allocated CPU interrupt.
@@ -910,7 +910,7 @@ void esp32s3_teardown_irq(int cpu, int periphid, int cpuint)
 
   putreg32(NO_CPUINT, regaddr);
 
-  leave_critical_section(irqstate);
+  spin_unlock_irqrestore(&g_irq_lock, flags);
 }
 
 /****************************************************************************
@@ -1087,12 +1087,12 @@ uint32_t *xtensa_int_decode(uint32_t cpuints, uint32_t *regs)
 
 void esp32s3_irq_noniram_disable(void)
 {
-  irqstate_t irqstate;
+  irqstate_t flags;
   int cpu;
   uint32_t oldint;
   uint32_t non_iram_ints;
 
-  irqstate = enter_critical_section();
+  flags = spin_lock_irqsave(&g_irq_lock);
   cpu = this_cpu();
   non_iram_ints = g_non_iram_int_mask[cpu];
 
@@ -1105,7 +1105,7 @@ void esp32s3_irq_noniram_disable(void)
 
   g_non_iram_int_disabled[cpu] = oldint & non_iram_ints;
 
-  leave_critical_section(irqstate);
+  spin_unlock_irqrestore(&g_irq_lock, flags);
 }
 
 /****************************************************************************
@@ -1124,11 +1124,11 @@ void esp32s3_irq_noniram_disable(void)
 
 void esp32s3_irq_noniram_enable(void)
 {
-  irqstate_t irqstate;
+  irqstate_t flags;
   int cpu;
   uint32_t non_iram_ints;
 
-  irqstate = enter_critical_section();
+  flags = spin_lock_irqsave(&g_irq_lock);
   cpu = this_cpu();
   non_iram_ints = g_non_iram_int_disabled[cpu];
 
@@ -1138,7 +1138,7 @@ void esp32s3_irq_noniram_enable(void)
 
   xtensa_enable_cpuint(&g_intenable[cpu], non_iram_ints);
 
-  leave_critical_section(irqstate);
+  spin_unlock_irqrestore(&g_irq_lock, flags);
 }
 
 /****************************************************************************
@@ -1241,10 +1241,10 @@ int esp32s3_irq_unset_iram_isr(int irq)
 
 void esp32s3_get_iram_interrupt_records(uint64_t *irq_count)
 {
-  irqstate_t flags = enter_critical_section();
+  irqstate_t flags = spin_lock_irqsave(&g_irq_lock);
 
   memcpy(irq_count, &g_iram_count, sizeof(uint64_t) * NR_IRQS);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_irq_lock, flags);
 }
 #endif

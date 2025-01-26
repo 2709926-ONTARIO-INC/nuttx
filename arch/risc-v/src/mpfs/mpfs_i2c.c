@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/risc-v/src/mpfs/mpfs_i2c.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -787,7 +789,7 @@ static int mpfs_i2c_transfer(struct i2c_master_s *dev,
 #ifdef CONFIG_DEBUG_I2C_ERROR
   /* We should never start at transfer with semaphore already signalled */
 
-  sem_getvalue(&priv->sem_isr, &sval);
+  nxsem_get_value(&priv->sem_isr, &sval);
   if (sval != 0)
     {
       i2cerr("Already signalled at start? %d\n", sval);

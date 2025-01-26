@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/dm320/dm320_usbdev.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -40,6 +42,7 @@
 #include <nuttx/usb/usbdev_trace.h>
 
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -231,6 +234,10 @@ struct dm320_usbdev_s
   /* The endpoint list */
 
   struct dm320_ep_s      eplist[DM320_NENDPOINTS];
+
+  /* Spinlock */
+
+  spinlock_t             lock;
 };
 
 /* For maintaining tables of endpoint info */
@@ -890,17 +897,15 @@ static inline void dm320_abortrequest(struct dm320_ep_s *privep,
  *
  ****************************************************************************/
 
-static void dm320_reqcomplete(struct dm320_ep_s *privep, int16_t result)
+static void dm320_reqcomplete_nolock(struct dm320_ep_s *privep,
+                                     int16_t result)
 {
   struct dm320_req_s *privreq;
   int stalled = privep->stalled;
-  irqstate_t flags;
 
   /* Remove the completed request at the head of the endpoint request list */
 
-  flags = enter_critical_section();
   privreq = dm320_rqdequeue(privep);
-  leave_critical_section(flags);
 
   if (privreq)
     {
@@ -931,6 +936,17 @@ static void dm320_reqcomplete(struct dm320_ep_s *privep, int16_t result)
     }
 }
 
+static void dm320_reqcomplete(struct dm320_ep_s *privep, int16_t result)
+{
+  irqstate_t flags = spin_lock_irqsave(&privep->dev->lock);
+
+  /* Remove the completed request at the head of the endpoint request list */
+
+  cxd56_reqcomplete_nolock(privep, result);
+
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
+}
+
 /****************************************************************************
  * Name: dm320_wrrequest
  *
@@ -942,7 +958,7 @@ static void dm320_reqcomplete(struct dm320_ep_s *privep, int16_t result)
  *
  ****************************************************************************/
 
-static int dm320_wrrequest(struct dm320_ep_s *privep)
+static int dm320_wrrequest_nolock(struct dm320_ep_s *privep)
 {
   struct dm320_req_s *privreq;
   uint8_t *buf;
@@ -1017,12 +1033,24 @@ static int dm320_wrrequest(struct dm320_ep_s *privep)
         {
           usbtrace(TRACE_COMPLETE(privep->epphy), privreq->req.xfrd);
           privep->txnullpkt = 0;
-          dm320_reqcomplete(privep, OK);
+          dm320_reqcomplete_nolock(privep, OK);
           return OK;
         }
     }
 
   return OK; /* Won't get here */
+}
+
+static int dm320_wrrequest(struct dm320_ep_s *privep)
+{
+  int ret;
+  irqstate_t flags = spin_lock_irqsave(&privep->dev->lock);
+
+  ret = dm320_wrrequest_nolock(privep);
+
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
+
+  return ret;
 }
 
 /****************************************************************************
@@ -1089,7 +1117,7 @@ static void dm320_cancelrequests(struct dm320_ep_s *privep)
     {
       usbtrace(TRACE_COMPLETE(privep->epphy),
                (dm320_rqpeek(privep))->req.xfrd);
-      dm320_reqcomplete(privep, -ESHUTDOWN);
+      dm320_reqcomplete_nolock(privep, -ESHUTDOWN);
     }
 }
 
@@ -1996,11 +2024,11 @@ static int dm320_epdisable(struct usbdev_ep_s *ep)
 
   /* Cancel any ongoing activity and reset the endpoint */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&privep->dev->lock);
   dm320_cancelrequests(privep);
   dm320_epreset(privep->epphy);
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&privep->dev->lock, flags);
   return OK;
 }
 
@@ -2139,7 +2167,7 @@ static int dm320_epsubmit(struct usbdev_ep_s *ep,
 
   req->result = -EINPROGRESS;
   req->xfrd   = 0;
-  flags       = enter_critical_section();
+  flags       = spin_lock_irqsave(&priv->lock);
 
   /* Check for NULL packet */
 
@@ -2177,7 +2205,7 @@ static int dm320_epsubmit(struct usbdev_ep_s *ep,
 
       dm320_rqenqueue(privep, privreq);
       usbtrace(TRACE_INREQQUEUED(privep->epphy), privreq->req.len);
-      ret = dm320_wrrequest(privep);
+      ret = dm320_wrrequest_nolock(privep);
     }
 
   /* Handle OUT (host-to-device) requests */
@@ -2199,7 +2227,7 @@ static int dm320_epsubmit(struct usbdev_ep_s *ep,
         }
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return ret;
 }
 
@@ -2229,9 +2257,9 @@ static int dm320_epcancel(struct usbdev_ep_s *ep,
   usbtrace(TRACE_EPCANCEL, privep->epphy);
   priv = privep->dev;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   dm320_cancelrequests(privep);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return OK;
 }
 
@@ -2339,6 +2367,7 @@ static void dm320_freeep(struct usbdev_s *dev,
 
 static int dm320_getframe(struct usbdev_s *dev)
 {
+  struct dm320_usbdev_s *priv = (struct dm320_usbdev_s *)dev;
   irqstate_t flags;
   int ret;
 
@@ -2356,10 +2385,10 @@ static int dm320_getframe(struct usbdev_s *dev)
    * because the operation is not atomic.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   ret = dm320_getreg8(DM320_USB_FRAME2) << 8;
   ret |= dm320_getreg8(DM320_USB_FRAME1);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return ret;
 }
 
@@ -2373,12 +2402,13 @@ static int dm320_getframe(struct usbdev_s *dev)
 
 static int dm320_wakeup(struct usbdev_s *dev)
 {
+  struct dm320_usbdev_s *priv = (struct dm320_usbdev_s *)dev;
   irqstate_t flags;
   usbtrace(TRACE_DEVWAKEUP, 0);
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   dm320_putreg8(USB_POWER_RESUME, DM320_USB_POWER);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return OK;
 }
 
@@ -2419,11 +2449,12 @@ static int dm320_selfpowered(struct usbdev_s *dev, bool selfpowered)
 #ifdef CONFIG_DM320_GIO_USBDPPULLUP
 static int dm320_pullup(struct usbdev_s *dev, bool enable)
 {
+  struct dm320_usbdev_s *priv = (struct dm320_usbdev_s *)dev;
   irqstate_t flags;
 
   usbtrace(TRACE_DEVPULLUP, (uint16_t)enable);
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->lock);
   if (enable)
     {
       GIO_SET_OUTPUT(CONFIG_DM320_GIO_USBDPPULLUP); /* Set D+ pullup */
@@ -2433,7 +2464,7 @@ static int dm320_pullup(struct usbdev_s *dev, bool enable)
       GIO_CLEAR_OUTPUT(CONFIG_DM320_GIO_USBDPPULLUP); /* Clear D+ pullup */
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->lock, flags);
   return OK;
 }
 #endif
@@ -2460,6 +2491,10 @@ void arm_usbinitialize(void)
   int i;
 
   usbtrace(TRACE_DEVINIT, 0);
+
+  /* Initialize dev lock */
+
+  spin_lock_init(&priv->lock);
 
   /* Initialize the device state structure */
 

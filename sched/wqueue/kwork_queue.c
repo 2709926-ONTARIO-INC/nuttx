@@ -47,11 +47,10 @@
 #define queue_work(wqueue, work) \
   do \
     { \
-      int sem_count; \
       dq_addlast((FAR dq_entry_t *)(work), &(wqueue)->q); \
-      nxsem_get_value(&(wqueue)->sem, &sem_count); \
-      if (sem_count < 0) /* There are threads waiting for sem. */ \
+      if ((wqueue)->wait_count > 0) /* There are threads waiting for sem. */ \
         { \
+          (wqueue)->wait_count--; \
           nxsem_post(&(wqueue)->sem); \
         } \
     } \
@@ -68,24 +67,29 @@
 static void work_timer_expiry(wdparm_t arg)
 {
   FAR struct work_s *work = (FAR struct work_s *)arg;
-  irqstate_t flags = enter_critical_section();
 
-  queue_work(work->wq, work);
-  leave_critical_section(flags);
+  irqstate_t flags = spin_lock_irqsave(&work->wq->lock);
+
+  /* We have being canceled */
+
+  if (work->worker != NULL)
+    {
+      queue_work(work->wq, work);
+    }
+
+  spin_unlock_irqrestore(&work->wq->lock, flags);
 }
 
 static bool work_is_canceling(FAR struct kworker_s *kworkers, int nthreads,
                               FAR struct work_s *work)
 {
-  int semcount;
   int wndx;
 
   for (wndx = 0; wndx < nthreads; wndx++)
     {
       if (kworkers[wndx].work == work)
         {
-          nxsem_get_value(&kworkers[wndx].wait, &semcount);
-          if (semcount < 0)
+          if (kworkers[wndx].wait_count > 0)
             {
               return true;
             }
@@ -134,7 +138,6 @@ int work_queue_wq(FAR struct kwork_wqueue_s *wqueue,
                   FAR void *arg, clock_t delay)
 {
   irqstate_t flags;
-  int ret = OK;
 
   if (wqueue == NULL || work == NULL || worker == NULL)
     {
@@ -145,18 +148,28 @@ int work_queue_wq(FAR struct kwork_wqueue_s *wqueue,
    * task logic or from interrupt handling logic.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&wqueue->lock);
 
   /* Remove the entry from the timer and work queue. */
 
   if (work->worker != NULL)
     {
-      work_cancel_wq(wqueue, work);
+      /* Remove the entry from the work queue and make sure that it is
+       * marked as available (i.e., the worker field is nullified).
+       */
+
+      work->worker = NULL;
+      wd_cancel(&work->u.timer);
+      if (dq_inqueue((FAR dq_entry_t *)work, &wqueue->q))
+        {
+          dq_rem((FAR dq_entry_t *)work, &wqueue->q);
+        }
     }
 
   if (work_is_canceling(wqueue->worker, wqueue->nthreads, work))
     {
-      goto out;
+      spin_unlock_irqrestore(&wqueue->lock, flags);
+      return 0;
     }
 
   /* Initialize the work structure. */
@@ -170,15 +183,15 @@ int work_queue_wq(FAR struct kwork_wqueue_s *wqueue,
   if (!delay)
     {
       queue_work(wqueue, work);
+      spin_unlock_irqrestore(&wqueue->lock, flags);
     }
   else
     {
       wd_start(&work->u.timer, delay, work_timer_expiry, (wdparm_t)work);
+      spin_unlock_irqrestore(&wqueue->lock, flags);
     }
 
-out:
-  leave_critical_section(flags);
-  return ret;
+  return 0;
 }
 
 int work_queue(int qid, FAR struct work_s *work, worker_t worker,

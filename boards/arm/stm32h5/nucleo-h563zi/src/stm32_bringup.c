@@ -1,6 +1,8 @@
 /****************************************************************************
  * boards/arm/stm32h5/nucleo-h563zi/src/stm32_bringup.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -99,6 +101,14 @@ int stm32_bringup(void)
   board_button_initialize();
 #endif
 #endif /* CONFIG_INPUT_BUTTONS */
+
+#ifdef CONFIG_ADC
+  ret = stm32_adc_setup();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: stm32_adc_setup failed: %d\n", ret);
+    }
+#endif /* CONFIG_ADC*/
 
   UNUSED(ret);
   return OK;

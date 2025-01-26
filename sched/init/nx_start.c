@@ -129,7 +129,7 @@ dq_queue_t g_assignedtasks[CONFIG_SMP_NCPUS];
 FAR struct tcb_s *g_delivertasks[CONFIG_SMP_NCPUS];
 #endif
 
-/* g_running_tasks[] holds a references to the running task for each cpu.
+/* g_running_tasks[] holds a references to the running task for each CPU.
  * It is valid only when up_interrupt_context() returns true.
  */
 
@@ -468,6 +468,10 @@ static void idle_group_initialize(void)
       /* Initialize the task join */
 
       nxtask_joininit(tcb);
+
+#ifndef CONFIG_PTHREAD_MUTEX_UNSAFE
+      spin_lock_init(&tcb->mutex_lock);
+#endif
 
 #ifdef CONFIG_SMP
       /* Create a stack for all CPU IDLE threads (except CPU0 which already

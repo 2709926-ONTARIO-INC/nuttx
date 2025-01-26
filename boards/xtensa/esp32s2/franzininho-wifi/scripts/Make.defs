@@ -1,6 +1,8 @@
 ############################################################################
 # boards/xtensa/esp32s2/franzininho-wifi/scripts/Make.defs
 #
+# SPDX-License-Identifier: Apache-2.0
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.  The
@@ -30,12 +32,8 @@ ARCHSCRIPT += $(BOARD_COMMON_DIR)$(DELIM)scripts$(DELIM)esp32s2_peripherals.ld
 # pick the common linker scripts.
 
 ARCHSCRIPT += $(call FINDSCRIPT,flat_memory.ld)
+ARCHSCRIPT += $(call FINDSCRIPT,esp32s2_sections.ld)
 
-ifeq ($(CONFIG_ESP32S2_APP_FORMAT_MCUBOOT),y)
-  ARCHSCRIPT += $(call FINDSCRIPT,mcuboot_sections.ld)
-else ifeq ($(CONFIG_ESPRESSIF_SIMPLE_BOOT),y)
-  ARCHSCRIPT += $(call FINDSCRIPT,simple_boot_sections.ld)
-endif
 
 ARCHPICFLAGS = -fpic
 

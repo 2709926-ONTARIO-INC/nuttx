@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/avr/src/at32uc3/at32uc3_gpioirq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -31,7 +33,7 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 
 #include "avr_internal.h"
 #include "irq/irq.h"
@@ -57,6 +59,10 @@ struct g_gpiohandler_s
 /* A table of handlers for each GPIO interrupt */
 
 static struct g_gpiohandler_s g_gpiohandler[NR_GPIO_IRQS];
+
+/* Spinlock */
+
+static spinlock_t g_gpioirq_lock = SP_UNLOCKED;
 
 /****************************************************************************
  * Private Functions
@@ -326,7 +332,7 @@ int gpio_irqattach(int irq, xcpt_t handler, void *arg)
        * to the unexpected interrupt handler.
        */
 
-      flags = enter_critical_section();
+      flags = spin_lock_irqsave(&g_gpioirq_lock);
       if (handler == NULL)
         {
            gpio_irqdisable(irq);
@@ -340,7 +346,7 @@ int gpio_irqattach(int irq, xcpt_t handler, void *arg)
       g_gpiohandler[irq].handler = handler;
       g_gpiohandler[irq].arg     = arg;
 
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&g_gpioirq_lock, flags);
       ret = OK;
     }
 

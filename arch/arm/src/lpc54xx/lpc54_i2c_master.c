@@ -1,14 +1,12 @@
 /****************************************************************************
  * arch/arm/src/lpc54xx/lpc54_i2c_master.c
  *
- *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
- *   Author: Gregory Nutt <gnutt@nuttx.org>
- *
- * Parts of this file were adapted from sample code provided for the LPC54xx
- * family from NXP which has a compatible BSD license.
- *
- *   Copyright (c) 2016, Freescale Semiconductor, Inc.
- *   Copyright 2016-2017 NXP
+ * SPDX-License-Identifier: BSD-3-Clause
+ * SPDX-FileCopyrightText: 2017 Gregory Nutt. All rights reserved.
+ * SPDX-FileCopyrightText: 2016 Freescale Semiconductor Inc.
+ * SPDX-FileCopyrightText: 2016 - 2017, NXP
+ * SPDX-FileContributor: Gregory Nutt <gnutt@nuttx.org>
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -62,7 +60,7 @@
 #include <nuttx/semaphore.h>
 #include <nuttx/i2c/i2c_master.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -138,6 +136,7 @@ struct lpc54_i2cdev_s
   int16_t result;           /* The result of the transfer */
 
   mutex_t lock;             /* Only one thread can access at a time */
+  spinlock_t spinlock;      /* Spinlock */
 #ifndef CONFIG_I2C_POLLED
   sem_t waitsem;            /* Supports wait for state machine completion */
   uint16_t irq;             /* Flexcomm IRQ number */
@@ -188,6 +187,7 @@ struct i2c_ops_s lpc54_i2c_ops =
 static struct lpc54_i2cdev_s g_i2c0_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -198,6 +198,7 @@ static struct lpc54_i2cdev_s g_i2c0_dev =
 static struct lpc54_i2cdev_s g_i2c1_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -208,6 +209,7 @@ static struct lpc54_i2cdev_s g_i2c1_dev =
 static struct lpc54_i2cdev_s g_i2c2_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -218,6 +220,7 @@ static struct lpc54_i2cdev_s g_i2c2_dev =
 static struct lpc54_i2cdev_s g_i2c3_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -228,6 +231,7 @@ static struct lpc54_i2cdev_s g_i2c3_dev =
 static struct lpc54_i2cdev_s g_i2c4_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -238,6 +242,7 @@ static struct lpc54_i2cdev_s g_i2c4_dev =
 static struct lpc54_i2cdev_s g_i2c5_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -248,6 +253,7 @@ static struct lpc54_i2cdev_s g_i2c5_dev =
 static struct lpc54_i2cdev_s g_i2c6_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -258,6 +264,7 @@ static struct lpc54_i2cdev_s g_i2c6_dev =
 static struct lpc54_i2cdev_s g_i2c7_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -268,6 +275,7 @@ static struct lpc54_i2cdev_s g_i2c7_dev =
 static struct lpc54_i2cdev_s g_i2c8_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -278,6 +286,7 @@ static struct lpc54_i2cdev_s g_i2c8_dev =
 static struct lpc54_i2cdev_s g_i2c9_dev =
 {
   .lock = NXMUTEX_INITIALIZER,
+  .spinlock = SP_UNLOCKED,
 #  ifndef CONFIG_I2C_POLLED
   .waitsem = SEM_INITIALIZER(0),
 #  endif
@@ -411,7 +420,7 @@ static void lpc54_i2c_timeout(wdparm_t arg)
   struct lpc54_i2cdev_s *priv = (struct lpc54_i2cdev_s *)arg;
 
 #ifndef CONFIG_I2C_POLLED
-  irqstate_t flags = enter_critical_section();
+  irqstate_t flags = spin_lock_irqsave(&priv->spinlock);
 #endif
 
   i2cerr("ERROR: Timeout! state=%u\n", priv->state);
@@ -432,7 +441,7 @@ static void lpc54_i2c_timeout(wdparm_t arg)
   /* Wake up any waiters */
 
   nxsem_post(&priv->waitsem);
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&priv->spinlock, flags);
 #endif
 }
 
@@ -523,7 +532,7 @@ static bool lpc54_i2c_nextmsg(struct lpc54_i2cdev_s *priv)
    * here.
    */
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&priv->spinlock);
 
   i2cinfo("nmsgs=%u\n", priv->nmsgs - 1);
 
@@ -537,7 +546,7 @@ static bool lpc54_i2c_nextmsg(struct lpc54_i2cdev_s *priv)
       lpc54_i2c_xfrsetup(priv);
 
       i2cinfo("state=%u\n", priv->state);
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->spinlock, flags);
       return false;
     }
   else
@@ -554,7 +563,7 @@ static bool lpc54_i2c_nextmsg(struct lpc54_i2cdev_s *priv)
       priv->state = I2CSTATE_IDLE;
 
       i2cinfo("state=%u\n", priv->state);
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&priv->spinlock, flags);
       return true;
     }
 }
@@ -900,12 +909,9 @@ static int lpc54_i2c_reset(struct i2c_master_s *dev)
 struct i2c_master_s *lpc54_i2cbus_initialize(int port)
 {
   struct lpc54_i2cdev_s *priv;
-  irqstate_t flags;
   uint32_t regval;
 
   i2cinfo("port=%d\n", port);
-
-  flags = enter_critical_section();
 
   /* Configure the requestin I2C peripheral */
 
@@ -1255,11 +1261,8 @@ struct i2c_master_s *lpc54_i2cbus_initialize(int port)
 #endif
     {
       i2cerr("ERROR: Unsupported port=%d\n", port);
-      leave_critical_section(flags);
       return NULL;
     }
-
-  leave_critical_section(flags);
 
   /* Install our operations */
 

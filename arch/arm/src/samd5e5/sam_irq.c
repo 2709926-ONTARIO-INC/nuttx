@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/samd5e5/sam_irq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -28,7 +30,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/arch.h>
 #include <arch/irq.h>
 #include <arch/armv7-m/nvicpri.h>
@@ -61,6 +63,14 @@
 #define NVIC_CLRENA_OFFSET (NVIC_IRQ0_31_CLEAR - NVIC_IRQ0_31_ENABLE)
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+#if defined(CONFIG_DEBUG_IRQ_INFO)
+static spinlock_t g_irq_lock = SP_UNLOCKED;
+#endif
+
+/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -77,7 +87,7 @@ static void sam_dumpnvic(const char *msg, int irq)
 {
   irqstate_t flags;
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&g_irq_lock);
 
   irqinfo("NVIC (%s, irq=%d):\n", msg, irq);
   irqinfo("  INTCTRL:    %08x VECTAB:  %08x\n",
@@ -173,7 +183,7 @@ static void sam_dumpnvic(const char *msg, int irq)
 #  warning Missing logic
 #endif
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_irq_lock, flags);
 }
 #else
 #  define sam_dumpnvic(msg, irq)
@@ -224,7 +234,6 @@ static int sam_reserved(int irq, void *context, void *arg)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_ARMV7M_USEBASEPRI
 static inline void sam_prioritize_syscall(int priority)
 {
   uint32_t regval;
@@ -236,7 +245,6 @@ static inline void sam_prioritize_syscall(int priority)
   regval |= (priority << NVIC_SYSH_PRIORITY_PR11_SHIFT);
   putreg32(regval, NVIC_SYSH8_11_PRIORITY);
 }
-#endif
 
 /****************************************************************************
  * Name: sam_irqinfo
@@ -393,9 +401,6 @@ static int sam_irqinfo(int irq, uintptr_t *regaddr, uint32_t *bit,
 void up_irqinitialize(void)
 {
   uintptr_t regaddr;
-#if defined(CONFIG_DEBUG_SYMBOLS) && !defined(CONFIG_ARMV7M_USEBASEPRI)
-  uint32_t regval;
-#endif
   int nintlines;
   int i;
 
@@ -470,9 +475,8 @@ void up_irqinitialize(void)
 #ifdef CONFIG_ARCH_IRQPRIO
   /* up_prioritize_irq(SAM_IRQ_PENDSV, NVIC_SYSH_PRIORITY_MIN); */
 #endif
-#ifdef CONFIG_ARMV7M_USEBASEPRI
+
   sam_prioritize_syscall(NVIC_SYSH_SVCALL_PRIORITY);
-#endif
 
   /* If the MPU is enabled, then attach and enable the Memory Management
    * Fault handler.
@@ -499,17 +503,6 @@ void up_irqinitialize(void)
 #endif
 
   sam_dumpnvic("initial", SAM_IRQ_NIRQS);
-
-  /* If a debugger is connected, try to prevent it from catching hardfaults.
-   * If CONFIG_ARMV7M_USEBASEPRI, no hardfaults are expected in normal
-   * operation.
-   */
-
-#if defined(CONFIG_DEBUG_SYMBOLS) && !defined(CONFIG_ARMV7M_USEBASEPRI)
-  regval  = getreg32(NVIC_DEMCR);
-  regval &= ~NVIC_DEMCR_VCHARDERR;
-  putreg32(regval, NVIC_DEMCR);
-#endif
 
 #ifdef CONFIG_SAMD5E5_EIC
   /* Initialize the external interrupt controller. */

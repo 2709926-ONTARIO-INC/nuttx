@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/arm/src/am335x/am335x_can.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -28,6 +30,7 @@
 
 #include <arch/board/board.h>
 #include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/arch.h>
 #include <nuttx/can/can.h>
 
@@ -202,6 +205,8 @@ static struct can_dev_s g_can1dev =
   .cd_priv = &g_can1priv,
 };
 #endif
+
+static spinlock_t g_can_lock = SP_UNLOCKED;
 
 /****************************************************************************
  * Private Functions
@@ -1077,7 +1082,7 @@ struct can_dev_s *am335x_can_initialize(int port)
 
   syslog(LOG_DEBUG, "CAN%d\n", port);
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&g_can_lock);
 
 #ifdef CONFIG_AM335X_CAN0
   if (port == 0)
@@ -1107,11 +1112,11 @@ struct can_dev_s *am335x_can_initialize(int port)
     {
       canerr("Unsupported port: %d\n", port);
 
-      leave_critical_section(flags);
+      spin_unlock_irqrestore(&g_can_lock, flags);
       return NULL;
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_can_lock, flags);
 
   return candev;
 }
@@ -1122,7 +1127,7 @@ void am335x_can_uninitialize(struct can_dev_s *dev)
 
   DEBUGASSERT(dev);
 
-  flags = enter_critical_section();
+  flags = spin_lock_irqsave(&g_can_lock);
 
 #ifdef CONFIG_AM335X_CAN0
   if (dev == &g_can0dev)
@@ -1149,7 +1154,7 @@ void am335x_can_uninitialize(struct can_dev_s *dev)
       canerr("Not a CAN device: %p\n", dev);
     }
 
-  leave_critical_section(flags);
+  spin_unlock_irqrestore(&g_can_lock, flags);
 }
 
 #endif

@@ -1,6 +1,8 @@
 /****************************************************************************
  * arch/mips/src/pic32mz/pic32mz_gpioirq.c
  *
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.  The
@@ -27,7 +29,7 @@
 #include <stdint.h>
 #include <assert.h>
 
-#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/arch.h>
 #include <arch/board/board.h>
 #include <arch/pic32mz/irq.h>
@@ -149,6 +151,10 @@ static struct ioport_level2_s * const g_level2_handlers[CHIP_NPORTS] =
   [PIC32MZ_IOPORTK] = &g_ioportk_cnisrs,
 #endif
 };
+
+/* Spinlock */
+
+static spinlock_t g_gpioirq_lock = SP_UNLOCKED;
 
 /****************************************************************************
  * Private Functions
@@ -478,7 +484,7 @@ int pic32mz_gpioattach(pinset_t pinset, xcpt_t handler, void *arg)
         {
           /* Get the previously attached handler as the return value */
 
-          flags = enter_critical_section();
+          flags = spin_lock_irqsave(&g_gpioirq_lock);
 
           /* Are we attaching or detaching? */
 
@@ -533,7 +539,7 @@ int pic32mz_gpioattach(pinset_t pinset, xcpt_t handler, void *arg)
 
           handlers->handler[pin].entry = handler;
           handlers->handler[pin].arg   = arg;
-          leave_critical_section(flags);
+          spin_unlock_irqrestore(&g_gpioirq_lock, flags);
         }
     }
 

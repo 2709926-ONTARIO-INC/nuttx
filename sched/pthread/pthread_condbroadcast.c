@@ -31,6 +31,8 @@
 #include <errno.h>
 #include <debug.h>
 
+#include <nuttx/atomic.h>
+
 #include "pthread/pthread.h"
 
 /****************************************************************************
@@ -56,7 +58,6 @@
 int pthread_cond_broadcast(FAR pthread_cond_t *cond)
 {
   int ret = OK;
-  int sval;
 
   sinfo("cond=%p\n", cond);
 
@@ -66,43 +67,25 @@ int pthread_cond_broadcast(FAR pthread_cond_t *cond)
     }
   else
     {
-      /* Disable pre-emption until all of the waiting threads have been
-       * restarted. This is necessary to assure that the sval behaves as
-       * expected in the following while loop
-       */
+      int wcnt = atomic_read(COND_WAIT_COUNT(cond));
 
-      sched_lock();
+      /* Loop until all of the waiting threads have been restarted. */
 
-      /* Get the current value of the semaphore */
-
-      if (nxsem_get_value(&cond->sem, &sval) != OK)
+      while (wcnt > 0)
         {
-          ret = EINVAL;
-        }
-      else
-        {
-          /* Loop until all of the waiting threads have been restarted. */
-
-          while (sval < 0)
+          if (atomic_cmpxchg(COND_WAIT_COUNT(cond), &wcnt, wcnt - 1))
             {
-              /* If the value is less than zero (meaning that one or more
-               * thread is waiting), then post the condition semaphore.
+              /* Post the condition semaphore to wake up a waiting thread.
                * Only the highest priority waiting thread will get to execute
                */
 
               ret = -nxsem_post(&cond->sem);
 
-              /* Increment the semaphore count (as was done by the
-               * above post).
-               */
+              /* Decrement the waiter count */
 
-              sval++;
+              wcnt--;
             }
         }
-
-      /* Now we can let the restarted threads run */
-
-      sched_unlock();
     }
 
   sinfo("Returning %d\n", ret);

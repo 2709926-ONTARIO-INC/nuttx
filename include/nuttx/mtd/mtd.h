@@ -491,6 +491,19 @@ FAR struct mtd_dev_s *mx35_initialize(FAR struct spi_dev_s *dev);
 FAR struct mtd_dev_s *rammtd_initialize(FAR uint8_t *start, size_t size);
 
 /****************************************************************************
+ * Name: rammtd_uninitialize
+ *
+ * Description:
+ *   Free the resources associated with a RAM MTD device instance.
+ *
+ * Input Parameters:
+ *   dev - Pointer to the MTD device instance to be uninitialized.
+ *
+ ****************************************************************************/
+
+void rammtd_uninitialize(FAR struct mtd_dev_s *dev);
+
+/****************************************************************************
  * Name: ramtron_initialize
  *
  * Description:
@@ -576,6 +589,17 @@ FAR struct mtd_dev_s *w25_initialize(FAR struct spi_dev_s *dev);
 
 FAR struct mtd_dev_s *gd25_initialize(FAR struct spi_dev_s *dev,
                                       uint32_t spi_devid);
+
+/****************************************************************************
+ * Name: gd55_initialize
+ *
+ * Description:
+ *   Initializes the driver for QSPI-based GD55 FLASH
+ *
+ ****************************************************************************/
+
+FAR struct mtd_dev_s *gd55_initialize(FAR struct qspi_dev_s *dev,
+                                      bool unprotect);
 
 /****************************************************************************
  * Name: gd5f_initialize
