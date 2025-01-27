@@ -273,5 +273,9 @@ int esp32s3_lan9250_uninitialize(int port);
 int esp_openeth_initialize(void);
 #endif
 
+#ifdef CONFIG_NET_W5500
+void esp_gw_eth_init(void);
+#endif
+
 #endif /* __ASSEMBLY__ */
 #endif /* __BOARDS_XTENSA_ESP32S3_ESP32S3_DEVKIT_SRC_ESP32S3_DEVKIT_H */

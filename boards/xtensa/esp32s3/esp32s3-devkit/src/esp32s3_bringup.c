@@ -449,6 +449,10 @@ int esp32s3_bringup(void)
 
 #endif
 
+#ifdef CONFIG_NET_W5500
+esp_gw_eth_init();
+#endif
+
 #ifdef CONFIG_ESP32S3_OPENETH
   ret = esp_openeth_initialize();
   if (ret < 0)
