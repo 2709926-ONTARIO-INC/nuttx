@@ -66,7 +66,6 @@ include rpmsgfs/Make.defs
 include zipfs/Make.defs
 include mnemofs/Make.defs
 include v9fs/Make.defs
-include notify/Make.defs
 endif
 
 CFLAGS += ${INCDIR_PREFIX}$(TOPDIR)$(DELIM)fs
@@ -109,6 +108,7 @@ clean:
 	$(call CLEAN)
 
 distclean:: clean
+	$(call DELFILE, $(CSRCS:.c=.ddc) $(ASRCS:.S=.dds))
 	$(call DELFILE, Make.dep)
 	$(call DELFILE, .depend)
 

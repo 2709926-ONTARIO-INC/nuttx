@@ -68,40 +68,58 @@ list(APPEND INCDIR ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/include)
 
 if(CONFIG_BUILTIN_COMPILER_RT)
 
-  nuttx_add_system_library(rt.buitlins)
+  nuttx_add_system_library(rt.builtins)
 
   target_include_directories(
-    rt.buitlins PRIVATE ${INCDIR}
+    rt.builtins PRIVATE ${INCDIR}
                         ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/builtins)
 
-  target_compile_options(rt.buitlins PRIVATE -Wno-undef -Wno-macro-redefined)
+  target_compile_options(rt.builtins PRIVATE -Wno-undef -Wno-macro-redefined)
 
   set(SRCSTMP)
   set(RT_BUILTINS_SRCS)
-  file(GLOB RT_BUILTINS_SRCS
-       ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/builtins/*.c)
+  set(BUILTINS_DIR ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/builtins)
 
-  file(GLOB SRCSTMP
-       ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/builtins/${ARCH}/*.S)
+  file(GLOB RT_BUILTINS_SRCS ${BUILTINS_DIR}/*.c)
+
+  file(GLOB SRCSTMP ${BUILTINS_DIR}/${ARCH}/*.S)
   list(APPEND RT_BUILTINS_SRCS ${SRCSTMP})
 
-  file(GLOB SRCSTMP
-       ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/builtins/${ARCH}/*.c)
+  file(GLOB SRCSTMP ${BUILTINS_DIR}/${ARCH}/*.c)
   list(APPEND RT_BUILTINS_SRCS ${SRCSTMP})
 
   if(NOT CONFIG_LIB_COMPILER_RT_HAS_BFLOAT16)
-    set(RT_BUILTINS_BFLOAT16_SRCS
-        ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/builtins/truncdfbf2.c
-        ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/builtins/truncsfbf2.c)
+    set(RT_BUILTINS_BFLOAT16_SRCS ${BUILTINS_DIR}/truncdfbf2.c
+                                  ${BUILTINS_DIR}/truncsfbf2.c)
     list(REMOVE_ITEM RT_BUILTINS_SRCS ${RT_BUILTINS_BFLOAT16_SRCS})
   endif()
 
-  if(NOT CONFIG_COVERAGE_NONE)
-    target_compile_options(rt.buitlins -fno-profile-instr-generate
-                           -fno-coverage-mapping)
+  set(x86_80_BIT_SOURCES
+      ${BUILTINS_DIR}/divxc3.c
+      ${BUILTINS_DIR}/extendxftf2.c
+      ${BUILTINS_DIR}/fixxfdi.c
+      ${BUILTINS_DIR}/fixxfti.c
+      ${BUILTINS_DIR}/fixunsxfdi.c
+      ${BUILTINS_DIR}/fixunsxfsi.c
+      ${BUILTINS_DIR}/fixunsxfti.c
+      ${BUILTINS_DIR}/floatdixf.c
+      ${BUILTINS_DIR}/floattixf.c
+      ${BUILTINS_DIR}/floatundixf.c
+      ${BUILTINS_DIR}/floatuntixf.c
+      ${BUILTINS_DIR}/mulxc3.c
+      ${BUILTINS_DIR}/powixf2.c
+      ${BUILTINS_DIR}/trunctfxf2.c)
+
+  if(NOT CONFIG_ARCH_X86_64)
+    list(REMOVE_ITEM RT_BUILTINS_SRCS ${x86_80_BIT_SOURCES})
   endif()
 
-  target_sources(rt.buitlins PRIVATE ${RT_BUILTINS_SRCS})
+  if(NOT CONFIG_COVERAGE_NONE)
+    target_compile_options(rt.builtins PRIVATE -fno-profile-instr-generate
+                                               -fno-coverage-mapping)
+  endif()
+
+  target_sources(rt.builtins PRIVATE ${RT_BUILTINS_SRCS})
 
 endif()
 
@@ -113,8 +131,8 @@ if(CONFIG_COVERAGE_COMPILER_RT)
     rt.profile PRIVATE ${INCDIR}
                        ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/profile)
 
-  target_compile_options(rt.profile -fno-profile-instr-generate
-                         -fno-coverage-mapping)
+  target_compile_options(rt.profile PRIVATE -fno-profile-instr-generate
+                                            -fno-coverage-mapping)
 
   target_compile_options(rt.profile PRIVATE -DCOMPILER_RT_HAS_UNAME -Wno-undef
                                             -Wno-strict-prototypes -Wno-shadow)
@@ -133,8 +151,12 @@ if(CONFIG_COVERAGE_COMPILER_RT)
 elseif(CONFIG_COVERAGE_MINI AND CONFIG_ARCH_TOOLCHAIN_CLANG)
   nuttx_add_system_library(rt.miniprofile)
 
-  target_compile_options(rt.miniprofile -fno-profile-instr-generate
-                         -fno-coverage-mapping)
+  target_include_directories(
+    rt.miniprofile PRIVATE ${INCDIR}
+                           ${CMAKE_CURRENT_LIST_DIR}/compiler-rt/lib/profile)
 
-  target_sources(rt.profile PRIVATE ${CMAKE_CURRENT_LIST_DIR}/coverage.c)
+  target_compile_options(rt.miniprofile PRIVATE -fno-profile-instr-generate
+                                                -fno-coverage-mapping)
+
+  target_sources(rt.miniprofile PRIVATE ${CMAKE_CURRENT_LIST_DIR}/coverage.c)
 endif()

@@ -31,7 +31,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include <arch/irq.h>
@@ -65,14 +65,6 @@
 #define NVIC_CLRENA_OFFSET (NVIC_IRQ0_31_CLEAR - NVIC_IRQ0_31_ENABLE)
 
 /****************************************************************************
- * Private Data
- ****************************************************************************/
-
-#if defined(CONFIG_DEBUG_IRQ_INFO)
-static spinlock_t g_irq_lock = SP_UNLOCKED;
-#endif
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -89,7 +81,7 @@ static void imxrt_dumpnvic(const char *msg, int irq)
 {
   irqstate_t flags;
 
-  flags = spin_lock_irqsave(&g_irq_lock);
+  flags = enter_critical_section();
 
   irqinfo("NVIC (%s, irq=%d):\n", msg, irq);
   irqinfo("  INTCTRL:    %08x VECTAB:  %08x\n",
@@ -217,7 +209,7 @@ static void imxrt_dumpnvic(const char *msg, int irq)
 #  warning Missing logic
 #endif
 
-  spin_unlock_irqrestore(&g_irq_lock, flags);
+  leave_critical_section(flags);
 }
 #else
 #  define imxrt_dumpnvic(msg, irq)
@@ -444,7 +436,7 @@ void up_irqinitialize(void)
    * vector table that requires special initialization.
    */
 
-  arm_ramvec_initialize();
+  putreg32((uint32_t)g_ram_vectors, NVIC_VECTAB);
 #endif
 
   /* Set all interrupts (and exceptions) to the default priority */
@@ -518,6 +510,7 @@ void up_irqinitialize(void)
 
   /* And finally, enable interrupts */
 
+  arm_color_intstack();
   up_irq_enable();
 #endif
 }

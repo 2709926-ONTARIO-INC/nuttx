@@ -630,7 +630,7 @@ struct up_dev_s
 
 #ifdef SERIAL_HAVE_TXDMA
   const unsigned int txdma_channel; /* DMA channel assigned */
-  DMA_HANDLE        txdma;          /* currently-open trasnmit DMA stream */
+  DMA_HANDLE        txdma;          /* currently-open transmit DMA stream */
 #endif
 
   /* RX DMA state */
@@ -2382,6 +2382,9 @@ static void up_dma_shutdown(struct uart_dev_s *dev)
 
       stm32_dmafree(priv->txdma);
       priv->txdma = NULL;
+
+      dev->dmatx.length = 0;
+      dev->dmatx.nlength = 0;
     }
 #endif
 }
@@ -2393,7 +2396,7 @@ static void up_dma_shutdown(struct uart_dev_s *dev)
  * Description:
  *   Configure the USART to operation in interrupt driven mode.  This method
  *   is called when the serial port is opened.  Normally, this is just after
- *   the the setup() method is called, however, the serial console may
+ *   the setup() method is called, however, the serial console may
  *   operate in a non-interrupt driven mode during the boot phase.
  *
  *   RX and TX interrupts are not enabled when by the attach method (unless
@@ -3350,7 +3353,7 @@ static void up_dma_txcallback(DMA_HANDLE handle, uint8_t status, void *arg)
 
   uart_xmitchars_done(&priv->dev);
 
-  /* Send more if availaible */
+  /* Send more if available */
 
   up_dma_txavailable(&priv->dev);
 }
@@ -3818,7 +3821,7 @@ uart_dev_t *stm32_serial_get_uart(int uart_num)
  *
  * Description:
  *   Performs the low level USART initialization early in debug so that the
- *   serial console will be available during bootup.  This must be called
+ *   serial console will be available during boot up.  This must be called
  *   before arm_serialinit.
  *
  ****************************************************************************/

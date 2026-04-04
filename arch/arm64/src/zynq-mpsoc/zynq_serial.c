@@ -52,6 +52,7 @@
 #include "arm64_arch_timer.h"
 #include "zynq_boot.h"
 #include "arm64_gic.h"
+#include "hardware/zynq_pll.h"
 
 #ifdef USE_SERIALDRIVER
 
@@ -502,7 +503,7 @@ static int zynq_uart_irq_handler(int irq, void *context, void *arg)
   return OK;
 }
 
-static int zynq_uart_baudrate(struct uart_dev_s *dev, uint32_t in_clk)
+static int zynq_uart_baudrate(struct uart_dev_s *dev)
 {
   struct zynq_uart_port_s *port = (struct zynq_uart_port_s *)dev->priv;
   const struct zynq_uart_config *config = &port->config;
@@ -524,11 +525,13 @@ static int zynq_uart_baudrate(struct uart_dev_s *dev, uint32_t in_clk)
   DEBUGASSERT(data->baud_rate <= (uint32_t)XUARTPS_MAX_RATE);
   DEBUGASSERT(data->baud_rate >= (uint32_t)XUARTPS_MIN_RATE);
 
+  input_clk = mpsoc_clk_rate_get(uart0_ref);
+
   /* Make sure the baud rate is not impossilby large.
    * Fastest possible baud rate is Input Clock / 2.
    */
 
-  if ((data->baud_rate * 2) > in_clk)
+  if ((data->baud_rate * 2) > input_clk)
     {
       return ERROR;
     }
@@ -537,10 +540,9 @@ static int zynq_uart_baudrate(struct uart_dev_s *dev, uint32_t in_clk)
 
   reg = getreg32(config->uart + XUARTPS_MR_OFFSET);
 
-  input_clk = in_clk;
   if (reg & XUARTPS_MR_CLKSEL)
     {
-      input_clk = in_clk / 8;
+      input_clk = input_clk / 8;
     }
 
   /* Determine the Baud divider. It can be 4to 254.
@@ -638,8 +640,7 @@ static int zynq_uart_setup(struct uart_dev_s *dev)
 
   DEBUGASSERT(data != NULL);
 
-  if (zynq_uart_baudrate(dev, CONFIG_XPAR_PSU_UART_0_UART_CLK_FREQ_HZ)
-      != OK)
+  if (zynq_uart_baudrate(dev) != OK)
     {
       return ERROR;
     }
@@ -774,7 +775,8 @@ static int zynq_uart_attach(struct uart_dev_s *dev)
 
   /* Set Interrupt Priority in Generic Interrupt Controller v2 */
 
-  arm64_gic_irq_set_priority(port->irq_num, 0, IRQ_TYPE_LEVEL);
+  up_prioritize_irq(port->irq_num, 0);
+  up_set_irq_type(port->irq_num, IRQ_HIGH_LEVEL);
 
   /* Enable UART Interrupt */
 
@@ -1023,6 +1025,9 @@ static void zynq_uart_txint(struct uart_dev_s *dev, bool enable)
 {
   struct zynq_uart_port_s *port = (struct zynq_uart_port_s *)dev->priv;
   struct zynq_uart_config *config = &port->config;
+  irqstate_t flags;
+
+  flags = enter_critical_section();
 
   /* Write to Interrupt Enable Register (UART_IER) */
 
@@ -1047,6 +1052,8 @@ static void zynq_uart_txint(struct uart_dev_s *dev, bool enable)
       modreg32(XUARTPS_IXR_TXEMPTY, XUARTPS_IXR_TXEMPTY,
                config->uart + XUARTPS_IDR_OFFSET);
     }
+
+  leave_critical_section(flags);
 }
 
 /***************************************************************************
@@ -1260,7 +1267,7 @@ static struct uart_dev_s g_uart1port =
  * Description:
  *   Performs the low level UART initialization early in
  *   debug so that the serial console will be available
- *   during bootup.  This must be called before arm64_serialinit.
+ *   during boot up.  This must be called before arm64_serialinit.
  *
  * Returned Value:
  *   None

@@ -60,7 +60,7 @@
 #define BCM_ARMT_BASEADDR                                                    \
   (BCM_PERIPHERAL_BASEADDR + 0x0000b000) /* ARM timer */
 #define BCM_AUX_BASEADDR                                                     \
-  (BCM_PERIPHERAL_BASEADDR + 0x000215000) /* Auxilliary */
+  (BCM_PERIPHERAL_BASEADDR + 0x000215000) /* Auxiliary */
 #define BCM_GPCLK_BASEADDR                                                   \
   (BCM_PERIPHERAL_BASEADDR + 0x000101000) /* General purpose clock */
 #define BCM_GPIO_BASEADDR                                                    \
@@ -103,6 +103,16 @@
 #define BCM_DMA15_BASE                                                       \
   (BCM_PERIPHERAL_BASEADDR + 0x000e05000) /* DMA Channel 15 */
 
+/* PACTL register address */
+
+#define BCM_PACTL_CS (BCM_PERIPHERAL_BASEADDR + 0x204e00)
+
+/* EMMC interface base addresses */
+
+#define BCM_SDHOST_BASEADDR (BCM_PERIPHERAL_BASEADDR + 0x202000) /* SDHost */
+#define BCM_EMMC1_BASEADDR (BCM_PERIPHERAL_BASEADDR + 0x300000)  /* EMMC1 */
+#define BCM_EMMC2_BASEADDR (BCM_PERIPHERAL_BASEADDR + 0x340000)  /* EMMC2 */
+
 /* ARM_LOCAL base address */
 
 #if defined(CONFIG_BCM2711_LOW_PERIPHERAL)
@@ -110,5 +120,9 @@
 #else
 #define BCM_ARMLOCAL_BASEADDR 0x4c0000000
 #endif /* defined(CONFIG_BCM2711_LOW_PERIPHERAL) */
+
+/* VideoCore mailbox base address */
+
+#define BCM_VC_MBOX_BASEADDR (BCM_PERIPHERAL_BASEADDR + 0xb880)
 
 #endif /* __ARCH_ARM64_SRC_BCM2711_MM_H */

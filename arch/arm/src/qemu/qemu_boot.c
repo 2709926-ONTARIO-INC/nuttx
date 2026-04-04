@@ -34,8 +34,10 @@
 
 #include "qemu_irq.h"
 #include "qemu_memorymap.h"
+#include "qemu_userspace.h"
 #include "smp.h"
 #include "gic.h"
+#include "scu.h"
 
 #ifdef CONFIG_DEVICE_TREE
 #  include <nuttx/fdt.h>
@@ -86,6 +88,12 @@ void arm_boot(void)
   qemu_setupmappings();
 #endif
 
+#ifdef CONFIG_SMP
+  /* Enable SMP cache coherency for CPU0 */
+
+  arm_enable_smp(0);
+#endif
+
   arm_fpuconfig();
 
 #ifdef CONFIG_ARM_PSCI
@@ -108,6 +116,10 @@ void arm_boot(void)
   syslog_rpmsg_init_early(g_syslog_rpmsg_buf, sizeof(g_syslog_rpmsg_buf));
 #endif
 
+#ifdef CONFIG_BUILD_PROTECTED
+  qemu_userspace();
+#endif
+
 #ifdef CONFIG_ARCH_ARMV7R
   /* dont return per armv7-r/arm_head.S design */
 
@@ -122,6 +134,14 @@ int up_cpu_start(int cpu)
   /* Notify of the start event */
 
   sched_note_cpu_start(this_task(), cpu);
+#endif
+
+#ifdef CONFIG_ARCH_ADDRENV
+  /* Copy cpu0 page table to target cpu. */
+
+  memcpy((uint32_t *)(PGTABLE_BASE_VADDR + PGTABLE_SIZE * cpu),
+          (uint32_t *)PGTABLE_BASE_VADDR, PGTABLE_SIZE);
+  UP_DSB();
 #endif
 
   return psci_cpu_on(cpu, (uintptr_t)__start);

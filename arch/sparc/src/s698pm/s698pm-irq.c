@@ -31,7 +31,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
 #include <arch/irq.h>
@@ -66,7 +66,7 @@
 #define IRQ_MKMAP(c, i)   (((c) << 0x05) | (i))
 
 /****************************************************************************
- * Private Data
+ * Public Data
  ****************************************************************************/
 
 static volatile uint8_t g_irqmap[NR_IRQS];
@@ -98,10 +98,6 @@ uintptr_t g_cpu_intstack_top[CONFIG_SMP_NCPUS] =
 #endif /* defined(CONFIG_SMP) */
 };
 #endif /* if CONFIG_ARCH_INTERRUPTSTACK > 7 */
-
-/* Spinlock */
-
-static spinlock_t g_irq_lock = SP_UNLOCKED;
 
 /****************************************************************************
  * Private Functions
@@ -149,6 +145,7 @@ void up_irqinitialize(void)
   /* And finally, enable cpu interrupts */
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
+  sparc_color_intstack();
   up_irq_enable();
 #endif
 }
@@ -223,10 +220,10 @@ int s698pm_cpuint_initialize(void)
 
 int s698pm_setup_irq(int cpu, int irq, int priority)
 {
-  irqstate_t flags;
+  irqstate_t irqstate;
   int cpuint;
 
-  flags = spin_lock_irqsave(&g_irq_lock);
+  irqstate = enter_critical_section();
 
   if (irq >= S698PM_IRQ_FIRST_INT && irq <= S698PM_IRQ_LAST_INT)
     {
@@ -234,10 +231,10 @@ int s698pm_setup_irq(int cpu, int irq, int priority)
     }
   else if (irq > S698PM_IRQ_LAST && irq < NR_IRQS)
     {
-      /* Second level interrupt share a IRQ and connnect to a interrupt 14
+      /* Second level interrupt share a IRQ and connect to a interrupt 14
        * of first level interrupt(that is IRQ 0x1E), We extend Second level
        * interrupt to IRQ 0x100~0x10F. because first level interrupt in the
-       * interrupt reister is bit 0~15 and second level interrupt is bit 16
+       * interrupt register is bit 0~15 and second level interrupt is bit 16
        * ~31, so cpuint of second level interrupt is irq - 256 +
        * S698PM_EXTENDED_START
        */
@@ -255,7 +252,7 @@ int s698pm_setup_irq(int cpu, int irq, int priority)
   g_irqmap[irq] = IRQ_MKMAP(cpu, cpuint);
   (void)up_prioritize_irq(irq, priority);
 
-  spin_unlock_irqrestore(&g_irq_lock, flags);
+  leave_critical_section(irqstate);
 
   return cpuint;
 }
@@ -277,13 +274,13 @@ int s698pm_setup_irq(int cpu, int irq, int priority)
 
 void s698pm_teardown_irq(int irq)
 {
-  irqstate_t flags;
+  irqstate_t irqstate;
 
-  flags = spin_lock_irqsave(&g_irq_lock);
+  irqstate = enter_critical_section();
 
   g_irqmap[irq] = IRQ_UNMAPPED;
 
-  spin_unlock_irqrestore(&g_irq_lock, flags);
+  leave_critical_section(irqstate);
 }
 
 /****************************************************************************

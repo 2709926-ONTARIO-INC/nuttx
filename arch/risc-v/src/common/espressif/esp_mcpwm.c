@@ -48,10 +48,12 @@
 #include "esp_attr.h"
 #include "hal/mcpwm_hal.h"
 #include "hal/mcpwm_ll.h"
-#include "soc/mcpwm_periph.h"
+#include "hal/mcpwm_periph.h"
+#include "hal/ledc_periph.h"
 #include "periph_ctrl.h"
 #include "hal/clk_tree_hal.h"
 #include "esp_clk_tree.h"
+#include "esp_private/esp_clk_tree_common.h"
 
 #ifdef CONFIG_ESP_MCPWM
 
@@ -87,6 +89,18 @@
 #endif
 #ifdef CONFIG_ESP_MCPMW_MOTOR_CH0_FAULT
 #  define ESP_MCPMW_MOTOR_FAULT
+#endif
+
+#if SOC_PERIPH_CLK_CTRL_SHARED
+#  define MCPWM_CLOCK_SRC_ATOMIC() PERIPH_RCC_ATOMIC()
+#else
+#  define MCPWM_CLOCK_SRC_ATOMIC()
+#endif
+
+#if !SOC_RCC_IS_INDEPENDENT
+#  define MCPWM_RCC_ATOMIC() PERIPH_RCC_ATOMIC()
+#else
+#  define MCPWM_RCC_ATOMIC()
 #endif
 
 /****************************************************************************
@@ -186,9 +200,10 @@ struct mcpwm_motor_lowerhalf_s
 
 struct mcpwm_capture_event_data_s
 {
-  uint32_t pos_edge_count;
-  uint32_t neg_edge_count;
-  uint32_t last_pos_edge_count;
+  uint32_t pos_edge_count;         /* Counter value on positive edge */
+  uint32_t neg_edge_count;         /* Counter value on negative edge */
+  uint32_t last_pos_edge_count;    /* Last counter value on positive edge */
+  uint32_t pos_edge_square_count;  /* Number of positive edges */
 };
 
 /* Lowe-half data structure for a capture channel */
@@ -234,6 +249,8 @@ static int esp_capture_getduty(struct cap_lowerhalf_s *lower,
                                uint8_t *duty);
 static int esp_capture_getfreq(struct cap_lowerhalf_s *lower,
                                uint32_t *freq);
+static int esp_capture_getedges(struct cap_lowerhalf_s *lower,
+                                uint32_t *edges);
 #endif
 
 /* MCPWM Motor Control */
@@ -348,6 +365,7 @@ static const struct cap_ops_s mcpwm_cap_ops =
   .stop    = esp_capture_stop,
   .getduty = esp_capture_getduty,
   .getfreq = esp_capture_getfreq,
+  .getedges = esp_capture_getedges,
 };
 
 /* Data structures for the available capture channels */
@@ -399,7 +417,7 @@ static struct mcpwm_cap_channel_lowerhalf_s mcpwm_cap_ch2_lowerhalf =
  * Description:
  *   Configures the MCPWM operator and generator, setting the PWM clock and
  *   output pins.
- *   If required, also configures fault detection. When done, sets the the
+ *   If required, also configures fault detection. When done, sets the
  *   motor state to IDLE.
  *
  * Input Parameters:
@@ -1290,7 +1308,7 @@ static int esp_mcpwm_fault_gpio_config(struct mcpwm_motor_lowerhalf_s *lower,
   if (!enable)
     {
       esp_gpio_matrix_in(0x3a,
-        mcpwm_periph_signals.groups[MCPWM_CAPTURE_DEFAULT_GROUP].\
+        soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
         gpio_faults[lower->fault_id].fault_sig,
         false);
       return OK;
@@ -1305,7 +1323,7 @@ static int esp_mcpwm_fault_gpio_config(struct mcpwm_motor_lowerhalf_s *lower,
 
   esp_gpio_matrix_in(
     lower->fault_pin,
-    mcpwm_periph_signals.groups[MCPWM_CAPTURE_DEFAULT_GROUP].\
+    soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
     gpio_faults[lower->fault_id].fault_sig,
     false);
 
@@ -1367,13 +1385,13 @@ static int esp_mcpwm_motor_set_gpio(struct mcpwm_motor_lowerhalf_s *lower,
 
   esp_gpio_matrix_out(
     lower->generator_pins[MCPWM_GENERATOR_0],
-    mcpwm_periph_signals.groups[MCPWM_CAPTURE_DEFAULT_GROUP].\
+    soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
     operators[lower->channel_id].generators[MCPWM_GENERATOR_0].pwm_sig,
     false, false);
 
   esp_gpio_matrix_out(
     lower->generator_pins[MCPWM_GENERATOR_1],
-    mcpwm_periph_signals.groups[MCPWM_CAPTURE_DEFAULT_GROUP].\
+    soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
     operators[lower->channel_id].generators[MCPWM_GENERATOR_1].pwm_sig,
     false, false);
 
@@ -1381,14 +1399,12 @@ static int esp_mcpwm_motor_set_gpio(struct mcpwm_motor_lowerhalf_s *lower,
 
 #ifdef CONFIG_ESP_MCPWM_TEST_LOOPBACK
   esp_gpio_matrix_out(CONFIG_ESP_MCPWM_CAPTURE_CH0_GPIO,
-                      mcpwm_periph_signals.\
-                      groups[MCPWM_CAPTURE_DEFAULT_GROUP].\
+                      soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
                       operators[lower->channel_id].\
                       generators[MCPWM_GENERATOR_0].pwm_sig,
                       0, 0);
   esp_gpio_matrix_out(CONFIG_ESP_MCPWM_CAPTURE_CH1_GPIO,
-                      mcpwm_periph_signals.\
-                      groups[MCPWM_CAPTURE_DEFAULT_GROUP].\
+                      soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
                       operators[lower->channel_id].\
                       generators[MCPWM_GENERATOR_1].pwm_sig,
                       0, 0);
@@ -1453,6 +1469,7 @@ static int esp_capture_start(struct cap_lowerhalf_s *lower)
   priv->isr_count = 0;
   priv->enabled = true;
   priv->ready = false;
+  priv->data->pos_edge_square_count = 0;
 
   spin_unlock_irqrestore(&priv->common->mcpwm_spinlock, flags);
   cpinfo("Channel enabled: %d\n", priv->channel_id);
@@ -1564,6 +1581,37 @@ static int esp_capture_getfreq(struct cap_lowerhalf_s *lower,
 #endif
 
 /****************************************************************************
+ * Name: esp_capture_getedges
+ *
+ * Description:
+ *   This function is a requirement of the upper-half driver. Returns
+ *   the last edges count value.
+ *
+ * Input Parameters:
+ *   lower - Pointer to the capture channel lower-half data structure.
+ *   edges - uint32_t pointer where the edges count value is written.
+ *
+ * Returned Value:
+ *   Returns OK on success.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_ESP_MCPWM_CAPTURE
+static int esp_capture_getedges(struct cap_lowerhalf_s *lower,
+                                uint32_t *edges)
+{
+  struct mcpwm_cap_channel_lowerhalf_s *priv = (
+    struct mcpwm_cap_channel_lowerhalf_s *)lower;
+
+  DEBUGASSERT(priv != NULL);
+
+  *edges = priv->data->pos_edge_square_count;
+  cpinfo("Get edges called from channel %d\n", priv->channel_id);
+  return OK;
+}
+#endif
+
+/****************************************************************************
  * Name: esp_mcpwm_group_start
  *
  * Description:
@@ -1584,11 +1632,29 @@ static void esp_mcpwm_group_start(void)
 
   /* HAL and MCPWM Initialization */
 
-  periph_module_enable(PERIPH_MCPWM0_MODULE);
+  MCPWM_RCC_ATOMIC()
+    {
+      mcpwm_ll_enable_bus_clock(g_mcpwm_common.group.group_id, true);
+      mcpwm_ll_reset_register(g_mcpwm_common.group.group_id);
+    }
+
+  MCPWM_CLOCK_SRC_ATOMIC()
+    {
+      mcpwm_ll_group_enable_clock(g_mcpwm_common.group.group_id, true);
+    }
+
   mcpwm_hal_init(hal, &g_mcpwm_common.group);
-  mcpwm_ll_group_set_clock_source(hal->dev, MCPWM_DEV_CLK_SOURCE);
-  mcpwm_ll_group_set_clock_prescale(hal->dev, g_mcpwm_common.group_prescale);
-  mcpwm_ll_group_enable_clock(hal->dev, true);
+
+  esp_clk_tree_enable_src((soc_module_clk_t)MCPWM_DEV_CLK_SOURCE, true);
+
+  MCPWM_CLOCK_SRC_ATOMIC()
+    {
+      mcpwm_ll_group_set_clock_source(g_mcpwm_common.group.group_id,
+                                      MCPWM_DEV_CLK_SOURCE);
+
+      mcpwm_ll_group_set_clock_prescale(g_mcpwm_common.group.group_id,
+                                        g_mcpwm_common.group_prescale);
+    }
 
   g_mcpwm_common.initialized = true;
 }
@@ -1623,7 +1689,8 @@ static int esp_mcpwm_capture_set_gpio(
     }
 
   esp_gpio_matrix_in(lower->gpio_pin,
-    mcpwm_periph_signals.groups[0].captures[lower->channel_id].cap_sig,
+    soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
+      captures[lower->channel_id].cap_sig,
     false);
 
   cpinfo("GPIO: %d configured for channel %d\n", lower->gpio_pin,
@@ -1649,32 +1716,25 @@ static int esp_mcpwm_capture_set_gpio(
  ****************************************************************************/
 
 #if defined(CONFIG_ESP_MCPWM_CAPTURE) || defined(ESP_MCPMW_MOTOR_FAULT)
-static int esp_mcpwm_isr_register(int (*fn)(int, void *, void *),
-                                          void *arg)
+static int esp_mcpwm_isr_register(int (*fn)(int, void *, void *), void *arg)
 {
   int cpuint;
   int ret;
 
-  cpuint = esp_setup_irq(mcpwm_periph_signals.groups[0].irq_id,
+  cpuint = esp_setup_irq(soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].\
+                         irq_id,
                          ESP_IRQ_PRIORITY_DEFAULT,
-                         ESP_IRQ_TRIGGER_LEVEL);
+                         ESP_IRQ_TRIGGER_LEVEL,
+                         fn,
+                         arg);
   if (cpuint < 0)
     {
       cperr("Failed to allocate a CPU interrupt.\n");
       return -ENOMEM;
     }
 
-  ret = irq_attach(ESP_IRQ_MCPWM0,
-                   fn,
-                   &g_mcpwm_common);
-  if (ret < 0)
-    {
-      cperr("Couldn't attach IRQ to handler.\n");
-      esp_teardown_irq(mcpwm_periph_signals.groups[0].irq_id, cpuint);
-      return ret;
-    }
-
-  up_enable_irq(ESP_IRQ_MCPWM0);
+  up_enable_irq(ESP_SOURCE2IRQ(
+                  soc_mcpwm_signals[MCPWM_CAPTURE_DEFAULT_GROUP].irq_id));
 
   return ret;
 }
@@ -1815,6 +1875,7 @@ static int IRAM_ATTR mcpwm_driver_isr_default(int irq, void *context,
       data->last_pos_edge_count = data->pos_edge_count;
       data->pos_edge_count = cap_value;
       data->neg_edge_count = data->pos_edge_count;
+      data->pos_edge_square_count++;
       mcpwm_ll_capture_enable_negedge(common->hal.dev,
                                       lower->channel_id,
                                       true);

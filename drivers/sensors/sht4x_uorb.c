@@ -47,10 +47,6 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#ifndef CONFIG_SHT4X_I2C_FREQUENCY
-#define CONFIG_SHT4X_I2C_FREQUENCY 400000
-#endif
-
 #define SHT4X_CRC_INIT 0xFF /* Initial value of the calculated CRC. */
 #define SHT4X_CRC_POLY 0x31 /* CRC calculation polynomial. */
 
@@ -67,7 +63,7 @@
 #define SHT4X_HEAT_20_P1 0x15     /* Activate heater with 20mW for 0.1s. */
 
 /****************************************************************************
- * Private
+ * Private Types
  ****************************************************************************/
 
 /* Sensor information for the lowerhalf sensors.
@@ -788,7 +784,7 @@ static int sht4x_thread(int argc, char **argv)
 
       /* Sleep before next fetch */
 
-      nxsig_usleep(dev->interval);
+      nxsched_usleep(dev->interval);
     }
 
   return OK;
@@ -839,14 +835,7 @@ int sht4x_register(FAR struct i2c_master_s *i2c, int devno, uint8_t addr)
   priv->addr = addr;
   priv->precision = SHT4X_PREC_HIGH;
   priv->interval = 1000000; /* 1s interval */
-  err = clock_systime_timespec(&priv->last_heat);
-
-  if (err < 0)
-    {
-      snerr("ERROR: Failed to get timespec: %d\n", err);
-      kmm_free(priv);
-      return err;
-    }
+  clock_systime_timespec(&priv->last_heat);
 
   /* Allow heat immediately after registration since in theory the sensor has
    * never had its heater activated yet.

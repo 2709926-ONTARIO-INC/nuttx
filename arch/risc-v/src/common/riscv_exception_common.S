@@ -26,6 +26,7 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/irq.h>
 #include <arch/arch.h>
 #include <arch/irq.h>
 #include <arch/mode.h>
@@ -80,11 +81,15 @@
 #  endif
 #endif
 
-/* Provide a default section for the exeception handler. */
+/* Provide a default section for the exception handler. */
 
 #ifndef EXCEPTION_SECTION
 #  define EXCEPTION_SECTION .text
 #endif
+
+/* Valid exceptions causes range is from 0 to 63 */
+
+#define CAUSE_EXCEPTION   63
 
 /****************************************************************************
  * Public Symbols
@@ -160,6 +165,11 @@ exception_common:
 
   blt        s2, x0, handle_irq   /* If cause < 0 it is interrupt */
 
+  /* Adjust exception cause range from 0 to 63 */
+
+  li         s3, CAUSE_EXCEPTION
+  and        s2, s2, s3
+
   /* Is it a system call ? */
 
   li         s3, RISCV_IRQ_ECALLU /* Is it a system call ? */
@@ -207,28 +217,55 @@ handle_irq:
   .cfi_offset x2, 8               /* Toolchain not support macro, is REG_X2 * 4 */
   .cfi_offset ra, 0               /* Toolchain not support macro, is REG_EPC * 4 */
 
+#ifdef CONFIG_SCHED_BACKTRACE
+  REGLOAD    ra, REG_EPC(sp)
+  REGLOAD    s0, REG_X8(sp)
+#endif
+
 #if CONFIG_ARCH_INTERRUPTSTACK > 15
 
   /* Switch to interrupt stack */
 
   setintstack t0, t1
 
+  addi       sp, sp, -(INT_REG_SIZE * 2)
+  REGSTORE   ra, INT_REG_SIZE(sp)
+  REGSTORE   s0, 0(sp)
+  add        s0, sp, (INT_REG_SIZE * 2)
+
   /* Call interrupt handler in C */
 
   jal        x1, riscv_dispatch_irq
+
+  REGLOAD    ra, INT_REG_SIZE(sp)
+  REGLOAD    s0, 0(sp)
+  add        sp, sp, (INT_REG_SIZE * 2)
 
 #else
   /* Reserve some space for current_regs if interrupt stack disabled */
 
+  addi       sp, sp, -(INT_REG_SIZE * 2)
+  REGSTORE   ra, INT_REG_SIZE(sp)
+  REGSTORE   s0, 0(sp)
+  add        s0, sp, (INT_REG_SIZE * 2)
+
+#ifdef CONFIG_ENABLE_ALL_SIGNALS
   addi       sp, sp, -XCPTCONTEXT_SIZE
+#endif
 
   /* Call interrupt handler in C */
 
   jal        x1, riscv_dispatch_irq
 
+  REGLOAD    ra, INT_REG_SIZE(sp)
+  REGLOAD    s0, 0(sp)
+  add        sp, sp, (INT_REG_SIZE * 2)
+
+#ifdef CONFIG_ENABLE_ALL_SIGNALS
   /* Restore sp */
 
   addi       sp, sp, XCPTCONTEXT_SIZE
+#endif
 #endif
 
 return_from_exception:
@@ -333,8 +370,8 @@ riscv_jump_to_user:
   .type   g_intstackalloc, object
   .type   g_intstacktop, object
 g_intstackalloc:
-  .skip  STACK_ALIGN_UP(STACK_ALLOC_SIZE)
+  .skip  STACKFRAME_ALIGN_UP(STACK_ALLOC_SIZE)
 g_intstacktop:
   .size  g_intstacktop, 0
-  .size  g_intstackalloc, STACK_ALIGN_DOWN(STACK_ALLOC_SIZE)
+  .size  g_intstackalloc, STACKFRAME_ALIGN_DOWN(STACK_ALLOC_SIZE)
 #endif

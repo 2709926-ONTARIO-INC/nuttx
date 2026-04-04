@@ -94,19 +94,6 @@
 #  define CONFIG_ARCH_INTERRUPTSTACK 0
 #endif
 
-/* The initial stack point is aligned at 16 bytes boundaries. If
- * necessary frame_size must be rounded up to the next boundary to retain
- * this alignment.
- */
-
-#define STACK_ALIGNMENT     16
-
-/* Stack alignment macros */
-
-#define STACK_ALIGN_MASK    (STACK_ALIGNMENT - 1)
-#define STACK_ALIGN_DOWN(a) ((a) & ~STACK_ALIGN_MASK)
-#define STACK_ALIGN_UP(a)   (((a) + STACK_ALIGN_MASK) & ~STACK_ALIGN_MASK)
-
 /* This is the value used to mark the stack for subsequent stack monitoring
  * logic.
  */
@@ -193,6 +180,16 @@ extern uint8_t _etbss[];           /* End+1 of .tbss */
  * Inline Functions
  ****************************************************************************/
 
+static inline void x86_64_cpuid(uint32_t leaf, uint32_t subleaf,
+                                uint32_t *eax, uint32_t *ebx,
+                                uint32_t *ecx, uint32_t *edx)
+{
+  __asm__ volatile("cpuid"
+                   : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
+                   : "a" (leaf), "c" (subleaf)
+                   : "memory");
+}
+
 #ifdef CONFIG_ARCH_KERNEL_STACK
 static inline_function uint64_t *x86_64_get_ktopstk(void)
 {
@@ -251,7 +248,7 @@ uint64_t *x86_64_syscall(uint64_t *regs);
 
 #ifdef CONFIG_ARCH_MULTIBOOT2
 void x86_64_mb2_fbinitialize(struct multiboot_tag_framebuffer *tag);
-void fb_putc(char ch);
+void fb_putc(int ch);
 #endif
 
 /* Defined in up_allocateheap.c */

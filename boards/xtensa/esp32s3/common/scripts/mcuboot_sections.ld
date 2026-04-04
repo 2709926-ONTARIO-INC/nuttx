@@ -79,7 +79,7 @@ SECTIONS
                     *libarch.a:*cache_hal.* *libarch.a:*mmu_hal.*
                     *libarch.a:*mpu_hal.*) .rodata.*)
 
-#ifdef CONFIG_ESP32S3_WIRELESS
+#ifdef CONFIG_ESPRESSIF_WIRELESS
     *(.rodata_wlog_verbose.*)
     *(.rodata_wlog_debug.*)
     *(.rodata_wlog_info.*)
@@ -186,7 +186,6 @@ SECTIONS
 
     *libarch.a:*esp_loader.*(.text .text.* .literal .literal.*)
     *libarch.a:esp32s3_cpuindex.*(.literal .text .literal.* .text.*)
-    *libarch.a:esp32s3_irq.*(.literal .text .literal.* .text.*)
     *libarch.a:esp32s3_user.*(.literal .text .literal.* .text.*)
     *libarch.a:esp32s3_spiflash.*(.literal .text .literal.* .text.*)
     *libarch.a:xtensa_assert.*(.literal .text .literal.* .text.*)
@@ -201,6 +200,7 @@ SECTIONS
     *libarch.a:*mmu_hal.*(.text .text.* .literal .literal.*)
 
     *libc.a:sq_remlast.*(.literal .text .literal.* .text.*)
+    *libc.a:arch_atomic.*(.literal .text .literal.* .text.*)
 
     *libdrivers.a:syslog_flush.*(.literal .text .literal.* .text.*)
 
@@ -208,9 +208,11 @@ SECTIONS
     *libsched.a:irq_csection.*(.literal .text .literal.* .text.*)
     *libsched.a:irq_dispatch.*(.literal .text .literal.* .text.*)
     *libsched.a:irq_spinlock.*(.literal .text .literal.* .text.*)
+    *libsched.a:sched_lock.*(.literal .text .literal.* .text.*)
     *libsched.a:sched_note.*(.literal .text .literal.* .text.*)
     *libsched.a:sched_suspendscheduler.*(.literal .text .literal.* .text.*)
     *libsched.a:sched_thistask.*(.literal .text .literal.* .text.*)
+    *libsched.a:sched_unlock.*(.literal .text .literal.* .text.*)
     *libsched.a:spinlock.*(.literal .text .literal.* .text.*)
     *libsched.a:stack_record.*(.literal .text .literal.* .text.*)
 
@@ -231,7 +233,6 @@ SECTIONS
     *libsched.a:sched_addreadytorun.*(.literal.nxsched_add_readytorun .text.nxsched_add_readytorun)
     *libsched.a:sched_addprioritized.*(.literal.nxsched_add_prioritized .text.nxsched_add_prioritized)
     *libsched.a:sched_mergepending.*(.literal.nxsched_merge_pending .text.nxsched_merge_pending)
-    *libsched.a:sched_resumescheduler.*(.literal.nxsched_resume_scheduler .text.nxsched_resume_scheduler)
 
     *libc.a:sq_remfirst.*(.literal.sq_remfirst .text.sq_remfirst)
 #endif
@@ -346,6 +347,8 @@ SECTIONS
      defined(CONFIG_ESP32S3_SPIRAM))
     *libc.a:lib_stackchk.*(.rodata  .rodata.*)
 #endif
+
+    *libc.a:arch_atomic.*(.rodata .rodata.*)
 
     _edata = ABSOLUTE(.);
     . = ALIGN(4);

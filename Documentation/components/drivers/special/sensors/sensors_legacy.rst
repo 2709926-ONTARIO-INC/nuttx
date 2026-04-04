@@ -6,7 +6,7 @@ The old sensors implementation where the character device interface is not
 standardized in any way.
 
 This approach is not recommended for new drivers, because without a
-standarized interface, creating portable application is imposible.
+standardized interface, creating portable application is impossible.
 
 Implemented Drivers
 ===================
@@ -72,7 +72,6 @@ Drivers that are available also with the new sensor framework are marked with ``
 - sgp30
 - sht21
 - sht3x
-- :doc:`sht4x`
 - sps30
 - t67xx
 - veml6070

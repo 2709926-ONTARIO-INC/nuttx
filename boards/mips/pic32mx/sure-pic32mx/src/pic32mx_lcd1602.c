@@ -25,7 +25,7 @@
  * controller
  */
 
-/* LCD pin mapping (see boards/sure-pic32mx/README.txt)
+/* LCD pin mapping
  *
  *  --------------------- ---------- ----------------------------------
  *  PIC32                  Sure JP1   Sure Signal Description
@@ -109,7 +109,7 @@
 #define NOP              __asm__ __volatile__ ("nop");
 
 /****************************************************************************
- * Private Type Definition
+ * Private Types
  ****************************************************************************/
 
 /* Global LCD state */

@@ -37,8 +37,8 @@
 
 #include "hardware/esp32_soc.h"
 
+#include "esp_clk.h"
 #include "esp32_tim.h"
-#include "esp32_clockconfig.h"
 #include "esp32_oneshot.h"
 
 #ifdef CONFIG_ESP32_ONESHOT
@@ -249,7 +249,7 @@ int esp32_oneshot_start(struct esp32_oneshot_s *oneshot,
   uint64_t timeout_us;
   int ret = OK;
 
-  tmrinfo("handler=%p arg=%p, ts=(%lu, %lu)\n",
+  tmrinfo("handler=%p arg=%p, ts=(%" PRIu32 ", %" PRIu32 ")\n",
           handler, arg, (unsigned long)ts->tv_sec,
           (unsigned long)ts->tv_nsec);
   DEBUGASSERT(oneshot != NULL);

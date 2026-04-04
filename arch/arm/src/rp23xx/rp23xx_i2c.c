@@ -39,7 +39,7 @@
 #include <nuttx/mutex.h>
 #include <nuttx/i2c/i2c_master.h>
 
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <arch/board/board.h>
 
 #include "chip.h"
@@ -79,7 +79,6 @@ struct rp23xx_i2cdev_s
   uint32_t         base_freq;  /* branch frequency */
 
   mutex_t          lock;       /* Only one thread can access at a time */
-  spinlock_t       spinlock;   /* Spinlock */
   sem_t            wait;       /* Place to wait for transfer completion */
   struct wdog_s    timeout;    /* watchdog to timeout when bus hung */
   uint32_t         frequency;  /* Current I2C frequency */
@@ -99,7 +98,6 @@ static struct rp23xx_i2cdev_s g_i2c0dev =
   .base = RP23XX_I2C0_BASE,
   .irqid = RP23XX_I2C0_IRQ,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .wait = SEM_INITIALIZER(0),
   .refs = 0,
 };
@@ -111,7 +109,6 @@ static struct rp23xx_i2cdev_s g_i2c1dev =
   .base = RP23XX_I2C1_BASE,
   .irqid = RP23XX_I2C1_IRQ,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .wait = SEM_INITIALIZER(0),
   .refs = 0,
 };
@@ -270,11 +267,11 @@ static void rp23xx_i2c_setfrequency(struct rp23xx_i2cdev_s *priv,
 static void rp23xx_i2c_timeout(wdparm_t arg)
 {
   struct rp23xx_i2cdev_s *priv = (struct rp23xx_i2cdev_s *)arg;
-  irqstate_t flags             = spin_lock_irqsave(&priv->spinlock);
+  irqstate_t flags             = enter_critical_section();
 
   priv->error = -ENODEV;
   nxsem_post(&priv->wait);
-  spin_unlock_irqrestore(&priv->spinlock, flags);
+  leave_critical_section(flags);
 }
 
 /****************************************************************************
@@ -399,7 +396,8 @@ static int rp23xx_i2c_interrupt(int irq, void *context, void *arg)
  *   if the interrupt occurs when the writing request.
  *   Actual receiving data is in RX_FULL interrupt handler.
  *
- * TODO : The argument "last" is not used.
+ *   TODO : The argument "last" is not used.
+ *
  ****************************************************************************/
 
 static int rp23xx_i2c_receive(struct rp23xx_i2cdev_s *priv, int last)
@@ -437,7 +435,7 @@ static int rp23xx_i2c_receive(struct rp23xx_i2cdev_s *priv, int last)
                               RP23XX_I2C_IC_DATA_CMD_CMD);
         }
 
-      flags = spin_lock_irqsave(&priv->spinlock);
+      flags = enter_critical_section();
       wd_start(&priv->timeout, I2C_TIMEOUT,
                rp23xx_i2c_timeout, (wdparm_t)priv);
 
@@ -450,7 +448,7 @@ static int rp23xx_i2c_receive(struct rp23xx_i2cdev_s *priv, int last)
       i2c_reg_rmw(priv, RP23XX_I2C_IC_INTR_MASK_OFFSET,
                   RP23XX_I2C_IC_INTR_STAT_R_RX_FULL,
                   RP23XX_I2C_IC_INTR_STAT_R_RX_FULL);
-      spin_unlock_irqrestore(&priv->spinlock, flags);
+      leave_critical_section(flags);
       nxsem_wait_uninterruptible(&priv->wait);
 
       if (priv->error != OK)
@@ -492,7 +490,7 @@ static int rp23xx_i2c_send(struct rp23xx_i2cdev_s *priv, int last)
            & RP23XX_I2C_IC_STATUS_TFNF))
     ;
 
-  flags = spin_lock_irqsave(&priv->spinlock);
+  flags = enter_critical_section();
   wd_start(&priv->timeout, I2C_TIMEOUT,
            rp23xx_i2c_timeout, (wdparm_t)priv);
   i2c_reg_write(priv, RP23XX_I2C_IC_DATA_CMD_OFFSET,
@@ -504,7 +502,7 @@ static int rp23xx_i2c_send(struct rp23xx_i2cdev_s *priv, int last)
   i2c_reg_rmw(priv, RP23XX_I2C_IC_INTR_MASK_OFFSET,
               RP23XX_I2C_IC_INTR_STAT_R_TX_EMPTY,
               RP23XX_I2C_IC_INTR_STAT_R_TX_EMPTY);
-  spin_unlock_irqrestore(&priv->spinlock, flags);
+  leave_critical_section(flags);
 
   nxsem_wait_uninterruptible(&priv->wait);
   return 0;
@@ -593,6 +591,7 @@ static int rp23xx_i2c_transfer(struct i2c_master_s *dev,
       if (priv->error != OK)
         {
           ret = priv->error;
+          wostop = 0;
           break;
         }
 
@@ -759,7 +758,7 @@ out:
 
 out_without_reinit:
 
-  /* Release the port for re-use by other clients */
+  /* Release the port for reuse by other clients */
 
   nxmutex_unlock(&priv->lock);
   return ret;
@@ -832,7 +831,8 @@ static void rp23xx_i2c_init(struct rp23xx_i2cdev_s *priv)
   i2c_reg_write(priv, RP23XX_I2C_IC_SDA_HOLD_OFFSET, 1);
 
   i2c_reg_write(priv, RP23XX_I2C_IC_CON_OFFSET,
-                (RP23XX_I2C_IC_CON_IC_SLAVE_DISABLE |
+                (RP23XX_I2C_IC_CON_IC_RESTART_EN |
+                 RP23XX_I2C_IC_CON_IC_SLAVE_DISABLE |
                  RP23XX_I2C_IC_CON_MASTER_MODE |
                  RP23XX_I2C_IC_CON_TX_EMPTY_CTRL));
 }

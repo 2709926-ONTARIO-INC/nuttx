@@ -63,7 +63,7 @@ else
 endif
 
 ifeq ($(CONFIG_STACK_CANARIES),y)
-  ARCHOPTIMIZATION += -fstack-protector-all
+  ARCHOPTIMIZATION += $(patsubst "%",%,$(CONFIG_STACK_CANARIES_LEVEL))
 endif
 
 ifeq ($(CONFIG_STACK_USAGE),y)
@@ -179,9 +179,9 @@ else ifeq ($(CONFIG_HOST_ARM),y)
 endif
 
 ifeq ($(CONFIG_HOST_LINUX),y)
-  LLVM_ABITYPE := gnu
+  LLVM_ABITYPE := sysv
 else ifeq ($(CONFIG_HOST_MACOS),y)
-  LLVM_ABITYPE := darwin
+  LLVM_ABITYPE := sysv
 endif
 
 ARCHPICFLAGS = -fpic
@@ -252,7 +252,7 @@ CMODULEFLAGS = $(CFLAGS) -fvisibility=hidden
 
 # -fno-pic to avoid GOT relocations
 CMODULEFLAGS += -fno-pic
-ifeq ($(CONFIG_LIBC_ARCH_ELF_64BIT),y)
+ifeq ($(CONFIG_ARCH_64BIT),y)
   # For amd64:
   # It seems macOS/x86_64 loads the program text around 00000001_xxxxxxxx.
   # The gcc default (-mcmodel=small) would produce out-of-range 32-bit
@@ -267,7 +267,7 @@ endif
 CMODULEFLAGS += -fno-stack-protector
 
 LDMODULEFLAGS = -r
-LDMODULEFLAGS += -T $(call CONVERT_PATH,$(TOPDIR)/libs/libc/modlib/gnu-elf.ld)
+LDMODULEFLAGS += -T $(call CONVERT_PATH,$(TOPDIR)/libs/libc/elf/gnu-elf.ld)
 SHMODULEFLAGS = -shared -Bsymbolic -G -Bdynamic
 
 # NuttX modules are ELF binaries.
@@ -286,14 +286,14 @@ CXXELFFLAGS = $(CXXFLAGS) -fvisibility=hidden
 # -fno-pic to avoid GOT relocations
 CELFFLAGS += -fno-pic
 CXXELFFLAGS += -fno-pic
-ifeq ($(CONFIG_LIBC_ARCH_ELF_64BIT),y)
+ifeq ($(CONFIG_ARCH_64BIT),y)
   # See the comment on CMODULEFLAGS above.
   CELFFLAGS += -mcmodel=large
   CXXELFFLAGS += -mcmodel=large
 endif
 
 LDELFFLAGS = -r -e main --gc-sections
-LDELFFLAGS += -T $(call CONVERT_PATH,$(TOPDIR)/libs/libc/modlib/gnu-elf.ld)
+LDELFFLAGS += -T $(call CONVERT_PATH,$(TOPDIR)/libs/libc/elf/gnu-elf.ld)
 
 ifeq ($(CONFIG_HOST_MACOS),y)
   LDFLAGS += -Wl,-dead_strip

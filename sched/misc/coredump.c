@@ -149,7 +149,7 @@ static int elf_emit(FAR struct elf_dumpinfo_s *cinfo,
   while (total > 0)
     {
       ret = lib_stream_puts(cinfo->stream, ptr, total);
-      if (ret < 0)
+      if (ret <= 0)
         {
           break;
         }
@@ -411,7 +411,7 @@ static void elf_emit_tcb_stack(FAR struct elf_dumpinfo_s *cinfo,
 #ifdef CONFIG_STACK_COLORATION
       else
         {
-          len = up_check_tcbstack(tcb);
+          len = up_check_tcbstack(tcb, tcb->adj_stack_size);
           buf = (uintptr_t)tcb->stack_base_ptr +
                            (tcb->adj_stack_size - len);
         }
@@ -428,6 +428,13 @@ static void elf_emit_tcb_stack(FAR struct elf_dumpinfo_s *cinfo,
   sp  = ALIGN_DOWN(buf, PROGRAM_ALIGNMENT);
   len = ALIGN_UP(len + (buf - sp), PROGRAM_ALIGNMENT);
   buf = sp;
+
+  /* Avoid out-of-bounds access */
+
+  if (buf + len > (uintptr_t)tcb->stack_base_ptr + tcb->adj_stack_size)
+    {
+      len = (uintptr_t)tcb->stack_base_ptr + tcb->adj_stack_size - buf;
+    }
 
   elf_emit(cinfo, (FAR void *)buf, len);
 
@@ -576,7 +583,7 @@ static void elf_emit_tcb_phdr(FAR struct elf_dumpinfo_s *cinfo,
 #ifdef CONFIG_STACK_COLORATION
       else
         {
-          phdr->p_filesz = up_check_tcbstack(tcb);
+          phdr->p_filesz = up_check_tcbstack(tcb, tcb->adj_stack_size);
           phdr->p_vaddr  = (uintptr_t)tcb->stack_base_ptr +
                            (tcb->adj_stack_size - phdr->p_filesz);
         }
@@ -686,7 +693,7 @@ static void coredump_dump_syslog(pid_t pid)
   FAR const char *streamname;
   int logmask;
 
-  logmask = setlogmask(LOG_ALERT);
+  logmask = setlogmask(LOG_UPTO(LOG_ALERT));
 
   _alert("Start coredump:\n");
 
@@ -759,7 +766,7 @@ static void coredump_dump_dev(pid_t pid)
       return;
     }
 
-  _alert("Finish coredump, write %zu bytes to %s\n",
+  _alert("Finish coredump, write %" PRIdOFF " bytes to %s\n",
          g_devstream.common.nput, CONFIG_BOARD_COREDUMP_DEVPATH);
 }
 #endif

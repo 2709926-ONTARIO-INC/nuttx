@@ -52,7 +52,7 @@
  */
 
 #ifdef CONFIG_STM32F0L0G0_HAVE_DMAMUX
-#  error DMAMUX not supported yet
+#  error DMAMUX not supported here. Look at stm32_dma_v1mux.c
 #endif
 
 /****************************************************************************
@@ -532,7 +532,7 @@ void stm32_dmastart(DMA_HANDLE handle, dma_callback_t callback,
 
   DEBUGASSERT(handle != NULL);
 
-  /* Save the callback info.  This will be invoked whent the DMA completes */
+  /* Save the callback info.  This will be invoked when the DMA completes. */
 
   dmach->callback = callback;
   dmach->arg      = arg;
@@ -744,19 +744,19 @@ void stm32_dmadump(DMA_HANDLE handle, const struct stm32_dmaregs_s *regs,
   uint32_t dmabase = DMA_BASE(dmach->base);
 
   dmainfo("DMA Registers: %s\n", msg);
-  dmainfo("   ISRC[%08x]: %08x\n",
+  dmainfo("   ISRC[%08" PRIx32 "]: %08" PRIx32 "\n",
           dmabase + STM32_DMA_ISR_OFFSET, regs->isr);
 #ifdef DMA_HAVE_CSELR
-  dmainfo("  CSELR[%08x]: %08x\n",
+  dmainfo("  CSELR[%08" PRIx32 "]: %08" PRIx32 "\n",
           dmabase + STM32_DMA_CSELR_OFFSET, regs->cselr);
 #endif
-  dmainfo("    CCR[%08x]: %08x\n",
+  dmainfo("    CCR[%08" PRIx32 "]: %08" PRIx32 "\n",
           dmach->base + STM32_DMACHAN_CCR_OFFSET, regs->ccr);
-  dmainfo("  CNDTR[%08x]: %08x\n",
+  dmainfo("  CNDTR[%08" PRIx32 "]: %08" PRIx32 "\n",
           dmach->base + STM32_DMACHAN_CNDTR_OFFSET, regs->cndtr);
-  dmainfo("   CPAR[%08x]: %08x\n",
+  dmainfo("   CPAR[%08" PRIx32 "]: %08" PRIx32 "\n",
           dmach->base + STM32_DMACHAN_CPAR_OFFSET, regs->cpar);
-  dmainfo("   CMAR[%08x]: %08x\n",
+  dmainfo("   CMAR[%08" PRIx32 "]: %08" PRIx32 "\n",
           dmach->base + STM32_DMACHAN_CMAR_OFFSET, regs->cmar);
 }
 #endif

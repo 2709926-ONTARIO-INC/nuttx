@@ -70,6 +70,10 @@
 #include <nuttx/input/buttons.h>
 #endif
 
+#ifdef CONFIG_TIMER_WDOG
+#include <nuttx/timers/timer_wdog.h>
+#endif
+
 #include "sim_internal.h"
 #include "sim.h"
 
@@ -551,6 +555,30 @@ int sim_bringup(void)
   mac[4] = (CONFIG_SIM_RNDIS_MACADDR >> (8 * 1)) & 0xff;
   mac[5] = (CONFIG_SIM_RNDIS_MACADDR >> (8 * 0)) & 0xff;
   usbdev_rndis_initialize(mac);
+#endif
+
+#ifdef CONFIG_SIM_CANDEV_CHAR
+  ret = sim_canchar_initialize(CONFIG_SIM_CANDEV_CHAR_IDX, 0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: sim_canchar_initialize() failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_SIM_CANDEV_SOCK
+  ret = sim_cansock_initialize(CONFIG_SIM_CANDEV_SOCK_IDX);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: sim_cansock_initialize() failed: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_TIMER_WDOG
+  ret = timer_wdog_initialize(0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: timer_wdog_initialize failed: %d\n", ret);
+    }
 #endif
 
   return ret;

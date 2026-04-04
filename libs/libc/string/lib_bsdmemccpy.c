@@ -1,6 +1,9 @@
 /****************************************************************************
  * libs/libc/string/lib_bsdmemccpy.c
  *
+ * SPDX-License-Identifier: BSD
+ * SPDX-FileCopyrightText: 1994-2009  Red Hat, Inc. All rights reserved
+ *
  * Copyright (c) 1994-2009  Red Hat, Inc. All rights reserved.
  *
  * This copyrighted material is made available to anyone wishing to use,
@@ -37,7 +40,7 @@
 
 #define LITTLEBLOCKSIZE (sizeof(long))
 
-/* Threshhold for punting to the byte copier. */
+/* Threshold for punting to the byte copier. */
 
 #define TOO_SMALL(len) ((len) < LITTLEBLOCKSIZE)
 
@@ -71,7 +74,7 @@
  *
  ****************************************************************************/
 
-#undef memccpy /* See mm/README.txt */
+#undef memccpy
 FAR void *memccpy(FAR void *s1, FAR const void *s2, int c, size_t n)
 {
   FAR void *ptr = NULL;

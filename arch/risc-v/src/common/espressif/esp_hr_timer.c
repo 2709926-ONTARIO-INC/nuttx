@@ -100,6 +100,8 @@ static struct esp_hr_timer_context_s g_hr_timer_context =
 };
 
 static bool g_hr_timer_initialized;
+static uint8_t g_hr_timer_lock_count;
+static irqstate_t g_hr_timer_lock_flags;
 
 /****************************************************************************
  * Private Functions
@@ -218,7 +220,7 @@ static int IRAM_ATTR esp_hr_timer_isr(int irq, void *context, void *arg)
 
   systimer_ll_clear_alarm_int(priv->hal.dev, SYSTIMER_ALARM_ESPTIMER);
 
-  flags = spin_lock_irqsave(&priv->lock);
+  flags = enter_critical_section();
 
   /* Check if there is a timer running */
 
@@ -285,10 +287,11 @@ static int IRAM_ATTR esp_hr_timer_isr(int irq, void *context, void *arg)
       if (ret < 0)
         {
           tmrerr("Failed to post sem ret=%d\n", ret);
+          return ret;
         }
     }
 
-  spin_unlock_irqrestore(&priv->lock, flags);
+  leave_critical_section(flags);
 
   return OK;
 }
@@ -351,11 +354,11 @@ int IRAM_ATTR esp_hr_timer_create(const struct esp_hr_timer_args_s *args,
  *   repeat        - Repeat mode (true: enabled, false: disabled).
  *
  * Returned Value:
- *   None.
+ *   OK on success; ERROR on failure.
  *
  ****************************************************************************/
 
-void IRAM_ATTR esp_hr_timer_start(struct esp_hr_timer_s *timer,
+int IRAM_ATTR esp_hr_timer_start(struct esp_hr_timer_s *timer,
                                   uint64_t timeout,
                                   bool repeat)
 {
@@ -364,12 +367,22 @@ void IRAM_ATTR esp_hr_timer_start(struct esp_hr_timer_s *timer,
   uint64_t counter;
   struct esp_hr_timer_s *p;
   irqstate_t flags = spin_lock_irqsave(&priv->lock);
+  int ret = ERROR;
+
+  if (timer == NULL)
+    {
+      return ret;
+    }
 
   /* Only idle timer can be started */
 
   if (timer->state != HR_TIMER_IDLE)
     {
-      esp_hr_timer_stop_nolock(timer);
+      ret = esp_hr_timer_stop_nolock(timer);
+      if (ret != OK)
+        {
+          return ret;
+        }
     }
 
   /* Calculate the timer's alarm value */
@@ -424,6 +437,7 @@ void IRAM_ATTR esp_hr_timer_start(struct esp_hr_timer_s *timer,
     }
 
   spin_unlock_irqrestore(&priv->lock, flags);
+  return OK;
 }
 
 /****************************************************************************
@@ -437,13 +451,14 @@ void IRAM_ATTR esp_hr_timer_start(struct esp_hr_timer_s *timer,
  *   timeout       - Timeout value.
  *
  * Returned Value:
- *   None.
+ *   OK on success; ERROR on failure.
  *
  ****************************************************************************/
 
-void esp_hr_timer_start_once(struct esp_hr_timer_s *timer, uint64_t timeout)
+int esp_hr_timer_start_once(struct esp_hr_timer_s *timer, uint64_t timeout)
 {
-  esp_hr_timer_start(timer, timeout, false);
+  int ret = esp_hr_timer_start(timer, timeout, false);
+  return ret;
 }
 
 /****************************************************************************
@@ -457,14 +472,15 @@ void esp_hr_timer_start_once(struct esp_hr_timer_s *timer, uint64_t timeout)
  *   timeout       - Timeout value.
  *
  * Returned Value:
- *   None.
+ *   OK on success; ERROR on failure.
  *
  ****************************************************************************/
 
-void esp_hr_timer_start_periodic(struct esp_hr_timer_s *timer,
+int esp_hr_timer_start_periodic(struct esp_hr_timer_s *timer,
                                  uint64_t timeout)
 {
-  esp_hr_timer_start(timer, timeout, true);
+  int ret = esp_hr_timer_start(timer, timeout, true);
+  return ret;
 }
 
 /****************************************************************************
@@ -477,13 +493,18 @@ void esp_hr_timer_start_periodic(struct esp_hr_timer_s *timer,
  *   timer         - HR Timer pointer.
  *
  * Returned Value:
- *   None.
+ *   OK on success, ERROR on failure.
  *
  ****************************************************************************/
 
-void IRAM_ATTR esp_hr_timer_stop_nolock(struct esp_hr_timer_s *timer)
+int IRAM_ATTR esp_hr_timer_stop_nolock(struct esp_hr_timer_s *timer)
 {
   struct esp_hr_timer_context_s *priv = &g_hr_timer_context;
+
+  if (timer == NULL)
+    {
+      return ERROR;
+    }
 
   /* "start" function can set the timer's repeat flag, and "stop" function
    * should remove this flag.
@@ -546,15 +567,24 @@ void IRAM_ATTR esp_hr_timer_stop_nolock(struct esp_hr_timer_s *timer)
       timer->state = HR_TIMER_IDLE;
       timer->callback(timer->arg);
     }
+
+  return OK;
 }
 
-void IRAM_ATTR esp_hr_timer_stop(struct esp_hr_timer_s *timer)
+int IRAM_ATTR esp_hr_timer_stop(struct esp_hr_timer_s *timer)
 {
+  int ret = ERROR;
   struct esp_hr_timer_context_s *priv = &g_hr_timer_context;
 
   irqstate_t flags = spin_lock_irqsave(&priv->lock);
-  esp_hr_timer_stop_nolock(timer);
+  if (timer == NULL)
+    {
+      return ret;
+    }
+
+  ret = esp_hr_timer_stop_nolock(timer);
   spin_unlock_irqrestore(&priv->lock, flags);
+  return ret;
 }
 
 /****************************************************************************
@@ -567,13 +597,13 @@ void IRAM_ATTR esp_hr_timer_stop(struct esp_hr_timer_s *timer)
  *   timer         - HR Timer pointer.
  *
  * Returned Value:
- *   None.
+ *   OK on success; ERROR on failure.
  *
  ****************************************************************************/
 
-void esp_hr_timer_delete(struct esp_hr_timer_s *timer)
+int esp_hr_timer_delete(struct esp_hr_timer_s *timer)
 {
-  int ret;
+  int ret = ERROR;
   irqstate_t flags;
 
   struct esp_hr_timer_context_s *priv = &g_hr_timer_context;
@@ -591,7 +621,7 @@ void esp_hr_timer_delete(struct esp_hr_timer_s *timer)
   else if (timer->state == HR_TIMER_DELETE)
     {
       spin_unlock_irqrestore(&priv->lock, flags);
-      return;
+      return ret;
     }
 
   list_add_after(&priv->toutlist, &timer->list);
@@ -605,6 +635,8 @@ void esp_hr_timer_delete(struct esp_hr_timer_s *timer)
     {
       tmrerr("Failed to post sem ret=%d\n", ret);
     }
+
+  return ret;
 }
 
 /****************************************************************************
@@ -694,6 +726,95 @@ void IRAM_ATTR esp_hr_timer_calibration(uint64_t time_us)
 }
 
 /****************************************************************************
+ * Name: esp_hr_timer_set
+ *
+ * Description:
+ *   Set the High Resolution Timer counter value to a specific timestamp.
+ *
+ * Input Parameters:
+ *   new_us        - New counter value in microseconds.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void IRAM_ATTR esp_hr_timer_set(uint64_t new_us)
+{
+  struct esp_hr_timer_context_s *priv = &g_hr_timer_context;
+
+  irqstate_t flags = spin_lock_irqsave(&priv->lock);
+  systimer_counter_value_t new_count =
+    {
+      .val = priv->hal.us_to_ticks(new_us),
+    };
+
+  systimer_ll_set_counter_value(priv->hal.dev, SYSTIMER_COUNTER_ESPTIMER,
+                                new_count.val);
+  systimer_ll_apply_counter_value(priv->hal.dev, SYSTIMER_COUNTER_ESPTIMER);
+  spin_unlock_irqrestore(&priv->lock, flags);
+}
+
+/****************************************************************************
+ * Name: esp_hr_timer_lock
+ *
+ * Description:
+ *   Acquire the High Resolution Timer lock to protect access to hardware
+ *   registers. Must be paired with esp_hr_timer_unlock().
+ *   This function supports recursive locking.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void IRAM_ATTR esp_hr_timer_lock(void)
+{
+  struct esp_hr_timer_context_s *priv = &g_hr_timer_context;
+  irqstate_t flags;
+
+  if (g_hr_timer_lock_count == 0)
+    {
+      flags = spin_lock_irqsave(&priv->lock);
+
+      g_hr_timer_lock_flags = flags;
+    }
+
+  g_hr_timer_lock_count++;
+}
+
+/****************************************************************************
+ * Name: esp_hr_timer_unlock
+ *
+ * Description:
+ *   Release the High Resolution Timer lock. Must be paired with
+ *   esp_hr_timer_lock().
+ *   This function supports recursive unlocking.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void IRAM_ATTR esp_hr_timer_unlock(void)
+{
+  struct esp_hr_timer_context_s *priv = &g_hr_timer_context;
+
+  g_hr_timer_lock_count--;
+
+  if (g_hr_timer_lock_count == 0)
+    {
+      spin_unlock_irqrestore(&priv->lock, g_hr_timer_lock_flags);
+    }
+}
+
+/****************************************************************************
  * Name: esp_hr_timer_init
  *
  * Description:
@@ -710,7 +831,7 @@ void IRAM_ATTR esp_hr_timer_calibration(uint64_t time_us)
 
 int esp_hr_timer_init(void)
 {
-  struct esp_hr_timer_context_s *priv = &g_hr_timer_context;
+  struct esp_hr_timer_context_s *priv;
   int pid;
 
   if (g_hr_timer_initialized)
@@ -719,8 +840,6 @@ int esp_hr_timer_init(void)
 
       return OK;
     }
-
-  spin_lock_init(&priv->lock);
 
   pid  = kthread_create(CONFIG_ESPRESSIF_HR_TIMER_TASK_NAME,
                         CONFIG_ESPRESSIF_HR_TIMER_TASK_PRIORITY,
@@ -734,6 +853,8 @@ int esp_hr_timer_init(void)
       return pid;
     }
 
+  priv = &g_hr_timer_context;
+
   list_initialize(&priv->runlist);
   list_initialize(&priv->toutlist);
 
@@ -742,7 +863,15 @@ int esp_hr_timer_init(void)
     {
       irqstate_t flags = spin_lock_irqsave(&priv->lock);
 
-      periph_module_enable(PERIPH_SYSTIMER_MODULE);
+      PERIPH_RCC_ACQUIRE_ATOMIC(PERIPH_SYSTIMER_MODULE, ref_count)
+        {
+          if (ref_count == 0)
+            {
+              systimer_ll_enable_bus_clock(true);
+              systimer_ll_reset_register();
+            }
+        }
+
       systimer_hal_init(&priv->hal);
       systimer_hal_tick_rate_ops_t ops =
         {
@@ -774,17 +903,15 @@ int esp_hr_timer_init(void)
       spin_unlock_irqrestore(&priv->lock, flags);
     }
 
-  esp_setup_irq(SYSTIMER_TARGET2_EDGE_INTR_SOURCE,
+  esp_setup_irq(ETS_SYSTIMER_TARGET2_INTR_SOURCE,
                 ESP_IRQ_PRIORITY_DEFAULT,
-                SYSTIMER_TRIGGER_TYPE);
-
-  /* Attach the systimer interrupt */
-
-  irq_attach(ESP_IRQ_SYSTIMER_TARGET2_EDGE, (xcpt_t)esp_hr_timer_isr, NULL);
+                SYSTIMER_TRIGGER_TYPE,
+                esp_hr_timer_isr,
+                NULL);
 
   /* Enable the allocated CPU interrupt */
 
-  up_enable_irq(ESP_IRQ_SYSTIMER_TARGET2_EDGE);
+  up_enable_irq(ESP_SOURCE2IRQ(ETS_SYSTIMER_TARGET2_INTR_SOURCE));
 
   g_hr_timer_initialized = true;
 

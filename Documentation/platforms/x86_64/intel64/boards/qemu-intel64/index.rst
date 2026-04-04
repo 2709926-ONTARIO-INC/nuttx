@@ -5,8 +5,6 @@ qemu-intel64
 This page file describes the contents of the build configurations available
 for the NuttX QEMU x86_64 port.
 
-
-
 QEMU/KVM
 ========
 
@@ -181,6 +179,18 @@ Basic command to run the image without additional PCI devices attached::
   qemu-system-x86_64 -m 2G -cpu host -smp 4 -enable-kvm \
   -kernel nuttx -nographic -serial mon:stdio
 
+Command to run the image with some xHCI devices attached::
+
+  qemu-system-x86_64 -m 4G -smp 4 -cpu host -enable-kvm \
+  -kernel nuttx -serial mon:stdio -chardev pty,id=ch1 \
+  -device qemu-xhci -device usb-mouse -device usb-kbd
+
+Command to run the image with e1000 NIC device with TAP::
+
+  qemu-system-x86_64 -m 2G -smp 4 -cpu host -enable-kvm \
+  -kernel nuttx -nographic -serial mon:stdio \
+  -device e1000,netdev=mynet0 \
+  -netdev tap,id=mynet0,ifname=tap0,script=no,downscript=no
 
 knsh_romfs
 ----------
@@ -212,7 +222,7 @@ to run on a bare metal Intel hardware with PCI serial port support.
 lvgl
 ----
 
-LVGL demo example that demonstrates x86_64 framebufer feature.
+LVGL demo example that demonstrates x86_64 framebuffer feature.
 
 fb
 ---

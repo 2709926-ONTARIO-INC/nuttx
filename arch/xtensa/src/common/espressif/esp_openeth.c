@@ -113,7 +113,7 @@ typedef struct
 {
   uint16_t cs : 1;   /* !< Carrier sense lost (flag set by HW) */
   uint16_t df : 1;   /* !< Defer indication (flag set by HW) */
-  uint16_t lc : 1;   /* !< Late collision occured (flag set by HW) */
+  uint16_t lc : 1;   /* !< Late collision occurred (flag set by HW) */
   uint16_t rl : 1;   /* !< TX failed due to retransmission limit (flag set by HW) */
   uint16_t rtry : 4; /* !< Number of retries before the frame was sent (set by HW) */
   uint16_t ur : 1;   /* !< Underrun status (flag set by HW) */
@@ -250,7 +250,7 @@ static IRAM_ATTR int openeth_isr_handler(int irq, void *context, void *arg)
 
   if (status & OPENETH_INT_BUSY)
     {
-      ninfo("RX frame dropped (0x%x)", status);
+      ninfo("RX frame dropped (0x%" PRIx32 ")", status);
     }
 
   /* Clear interrupt */
@@ -475,6 +475,8 @@ int esp_openeth_initialize(void)
 
   dev->quota[NETPKT_TX] = TX_BUF_COUNT;
   dev->quota[NETPKT_RX] = RX_BUF_COUNT;
+  dev->rxtype           = NETDEV_RX_THREAD;
+  dev->priority         = 100;
 
   /* Allocate DMA buffers */
 
@@ -512,8 +514,9 @@ int esp_openeth_initialize(void)
 
   /* Setup interrupts */
 
-  priv->cpuint = OPENETH_SETUP_IRQ(0, OPENETH_PERIPH_MAC,
-                                 1, OPENETH_CPUINT_LEVEL);
+  priv->cpuint = OPENETH_SETUP_IRQ(OPENETH_PERIPH_MAC,
+                                   1, OPENETH_CPUINT_LEVEL,
+                                   openeth_isr_handler, priv);
   if (priv->cpuint < 0)
     {
       nerr("ERROR: Failed allocate interrupt\n");
@@ -528,10 +531,6 @@ int esp_openeth_initialize(void)
   memcpy(priv->dev.netdev.d_mac.ether.ether_addr_octet,
     "\x00\x02\x03\x04\x05\x06\x07\x08", ETH_ALEN);
   openeth_set_addr(priv->dev.netdev.d_mac.ether.ether_addr_octet);
-
-  /* Attach the interrupt */
-
-  ret = irq_attach(OPENETH_IRQ_MAC, openeth_isr_handler, priv);
 
   /* Register the device with the OS so that socket IOCTLs can be
    * performed.

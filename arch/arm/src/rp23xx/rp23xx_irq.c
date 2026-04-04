@@ -30,7 +30,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <arch/irq.h>
 
@@ -50,14 +50,6 @@
 
 #if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 7
 #  define INTSTACK_ALLOC (CONFIG_SMP_NCPUS * INTSTACK_SIZE)
-#endif
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-#if defined(CONFIG_DEBUG_IRQ_INFO)
-static spinlock_t g_irq_lock = SP_UNLOCKED;
 #endif
 
 /****************************************************************************
@@ -103,7 +95,7 @@ static void rp23xx_dumpnvic(const char *msg, int irq)
 {
   irqstate_t flags;
 
-  flags = spin_lock_irqsave(&g_irq_lock);
+  flags = enter_critical_section();
 
   irqinfo("NVIC (%s, irq=%d):\n", msg, irq);
   irqinfo("  ISER0:      %08x ICER0:   %08x\n",
@@ -145,7 +137,7 @@ static void rp23xx_dumpnvic(const char *msg, int irq)
   irqinfo("  SHPR3:      %08x\n",
           getreg32(NVIC_SYSH12_15_PRIORITY));
 
-  spin_unlock_irqrestore(&g_irq_lock, flags);
+  leave_critical_section(flags);
 }
 
 #else
@@ -474,11 +466,11 @@ int up_prioritize_irq(int irq, int priority)
 
   if (irq >= RP23XX_IRQ_EXTINT && irq < RP23XX_IRQ_EXTINT + 32)
     {
-      /* ARMV6M_NVIC_IPR() maps register IPR0-IPR7 with four settings per
+      /* NVIC_IRQ_PRIORITY maps register IPR0-IPR7 with four settings per
        * register.
        */
 
-      regaddr = ARMV6M_NVIC_IPR(irq >> 2);
+      regaddr = NVIC_IRQ_PRIORITY(irq);
       shift   = (irq & 3) << 3;
     }
 
@@ -489,13 +481,13 @@ int up_prioritize_irq(int irq, int priority)
 
   else if (irq == RP23XX_IRQ_PENDSV)
     {
-      regaddr = ARMV6M_SYSCON_SHPR2;
-      shift   = SYSCON_SHPR3_PRI_14_SHIFT;
+      regaddr = NVIC_SYSH12_15_PRIORITY;
+      shift   = NVIC_SYSH_PRIORITY_PR14_SHIFT;
     }
   else if (irq == RP23XX_IRQ_SYSTICK)
     {
-      regaddr = ARMV6M_SYSCON_SHPR2;
-      shift   = SYSCON_SHPR3_PRI_15_SHIFT;
+      regaddr = NVIC_SYSH12_15_PRIORITY;
+      shift   = NVIC_SYSH_PRIORITY_PR15_SHIFT;
     }
   else
     {

@@ -42,6 +42,9 @@ COMPILER_RT_OBJDIR = compiler-rt \
 BIN_OBJDIR = $(addprefix $(BINDIR)$(DELIM),$(COMPILER_RT_OBJDIR))
 KBIN_OBJDIR = $(addprefix $(KBINDIR)$(DELIM),$(COMPILER_RT_OBJDIR))
 
+$(BIN_OBJDIR) $(KBIN_OBJDIR):
+	$(Q) mkdir -p $@
+
 ifeq ($(wildcard compiler-rt/compiler-rt/lib),)
 
 compiler-rt-$(COMPILER_RT_VERSION).src.tar.xz:
@@ -51,7 +54,6 @@ compiler-rt/compiler-rt: compiler-rt-$(COMPILER_RT_VERSION).src.tar.xz
 	$(Q) tar -xf $<
 	$(Q) mv compiler-rt-$(COMPILER_RT_VERSION).src $@
 	$(call DELDIR, $<)
-	$(Q) mkdir $(BIN_OBJDIR) $(KBIN_OBJDIR)
 
 compiler-rt: compiler-rt/compiler-rt
 
@@ -60,12 +62,14 @@ endif
 ifeq ($(CONFIG_LIB_COMPILER_RT),y)
 
 .PHONY: compiler-rt
-depend:: compiler-rt
+depend:: compiler-rt $(BIN_OBJDIR) $(KBIN_OBJDIR)
 
 distclean::
 	$(call DELDIR, $(BIN_OBJDIR))
 	$(call DELDIR, $(KBIN_OBJDIR))
+ifeq ($(wildcard compiler-rt/compiler-rt/.git),)
 	$(call DELDIR, compiler-rt/compiler-rt)
+endif
 
 FLAGS += ${INCDIR_PREFIX}$(CURDIR)/compiler-rt/compiler-rt/include
 
@@ -90,6 +94,14 @@ ifeq ($(CONFIG_LIB_COMPILER_RT_HAS_BFLOAT16),)
   CSRCS := $(filter-out $(BFLOAT16_SRCS), $(CSRCS))
 endif
 
+ifeq ($(CONFIG_ARCH_X86_64),)
+  x86_80_BIT_SOURCES := divxc3.c extendxftf2.c fixxfdi.c fixxfti.c fixunsxfdi.c
+  x86_80_BIT_SOURCES += fixunsxfsi.c fixunsxfti.c floatdixf.c floattixf.c floatundixf.c
+  x86_80_BIT_SOURCES += floatuntixf.c mulxc3.c powixf2.c trunctfxf2.c
+  x86_80_BIT_SOURCES := $(addprefix compiler-rt/compiler-rt/lib/builtins/, $(x86_80_BIT_SOURCES))
+  CSRCS := $(filter-out $(x86_80_BIT_SOURCES), $(CSRCS))
+endif
+
 endif
 
 ################# Profile Library #################
@@ -108,6 +120,7 @@ CSRCS += InstrProfilingPlatform.c
 
 else ifeq ($(CONFIG_COVERAGE_MINI)$(CONFIG_ARCH_TOOLCHAIN_CLANG),yy)
 
+FLAGS += ${INCDIR_PREFIX}$(CURDIR)/compiler-rt/compiler-rt/lib/profile
 FLAGS += -fno-profile-instr-generate -fno-coverage-mapping
 
 CSRCS += coverage.c

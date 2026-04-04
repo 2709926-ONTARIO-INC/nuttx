@@ -108,7 +108,7 @@
 #define INTCFG_EN_Z              (1 << 5)
 
 /****************************************************************************
- * Private Type Definitions
+ * Private Types
  ****************************************************************************/
 
 struct bmm150_trim_s
@@ -188,6 +188,7 @@ static const struct sensor_ops_s g_bmm150_sensor_ops =
   NULL,                 /* set_calibvalue */
   NULL,                 /* calibrate */
   NULL,                 /* get_info */
+  NULL,                 /* set_nonwakeup */
   NULL,                 /* control */
 };
 
@@ -654,7 +655,7 @@ static int bmm150_thread(int argc, FAR char **argv)
 
       /* Sleeping thread before fetching the next sensor data */
 
-      nxsig_usleep(dev->interval);
+      nxsched_usleep(dev->interval);
     }
 
   return OK;
@@ -735,7 +736,7 @@ int bmm150_register_uorb(int devno, FAR struct bmm150_config_s *config)
       return ret;
     }
 
-  /* Regsiter driver */
+  /* Register driver */
 
   ret = sensor_register(&dev->lower, devno);
   if (ret < 0)

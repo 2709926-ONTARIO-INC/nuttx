@@ -38,7 +38,7 @@
 #include <arpa/inet.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <nuttx/queue.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
@@ -78,10 +78,6 @@
  ****************************************************************************/
 
 /* Configuration ************************************************************/
-
-/* See boards/arm/stm32/stm3240g-eval/README.txt for an explanation of the
- * configuration settings.
- */
 
 #if STM32H5_NETHERNET > 1
 #  error "Logic to support multiple Ethernet interfaces is incomplete"
@@ -613,7 +609,6 @@ struct stm32_ethmac_s
   struct wdog_s        txtimeout;   /* TX timeout timer */
   struct work_s        irqwork;     /* For deferring interrupt work to the work queue */
   struct work_s        pollwork;    /* For deferring poll work to the work queue */
-  spinlock_t           lock;        /* Spinlock */
 
   /* This holds the information visible to the NuttX network */
 
@@ -848,7 +843,7 @@ static uint32_t stm32_getreg(uint32_t addr)
 
   /* Show the register value read */
 
-  ninfo("%08x->%08x\n", addr, val);
+  ninfo("%08" PRIx32 "->%08" PRIx32 "\n", addr, val);
   return val;
 }
 #endif
@@ -875,7 +870,7 @@ static void stm32_putreg(uint32_t val, uint32_t addr)
 {
   /* Show the register value being written */
 
-  ninfo("%08x<-%08x\n", addr, val);
+  ninfo("%08" PRIx32 "<-%08" PRIx32 "\n", addr, val);
 
   /* Write the value */
 
@@ -1664,7 +1659,7 @@ static int stm32_recvframe(struct stm32_ethmac_s *priv)
    *   3) All of the TX descriptors are in flight.
    *
    * This last case is obscure.  It is due to that fact that each packet
-   * that we receive can generate an unstoppable transmisson.  So we have
+   * that we receive can generate an unstoppable transmission.  So we have
    * to stop receiving when we can not longer transmit.  In this case, the
    * transmit logic should also have disabled further RX interrupts.
    */
@@ -1970,7 +1965,7 @@ static void stm32_receive(struct stm32_ethmac_s *priv)
         }
 
       /* We are finished with the RX buffer.  NOTE:  If the buffer is
-       * re-used for transmission, the dev->d_buf field will have been
+       * reused for transmission, the dev->d_buf field will have been
        * nullified.
        */
 
@@ -2473,7 +2468,7 @@ static int stm32_ifdown(struct net_driver_s *dev)
 
   /* Disable the Ethernet interrupt */
 
-  flags = spin_lock_irqsave(&priv->lock);
+  flags = enter_critical_section();
   up_disable_irq(STM32_IRQ_ETH);
 
   /* Cancel the TX timeout timers */
@@ -2490,7 +2485,7 @@ static int stm32_ifdown(struct net_driver_s *dev)
   /* Mark the device "down" */
 
   priv->ifup = false;
-  spin_unlock_irqrestore(&priv->lock, flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -3380,7 +3375,7 @@ static int stm32_phyinit(struct stm32_ethmac_s *priv)
           break;
         }
 
-      nxsig_usleep(100);
+      nxsched_usleep(100);
     }
 
   if (timeout >= PHY_RETRY_TIMEOUT)
@@ -3414,7 +3409,7 @@ static int stm32_phyinit(struct stm32_ethmac_s *priv)
           break;
         }
 
-      nxsig_usleep(100);
+      nxsched_usleep(100);
     }
 
   if (timeout >= PHY_RETRY_TIMEOUT)
@@ -3605,9 +3600,10 @@ static inline void stm32_ethgpioconfig(struct stm32_ethmac_s *priv)
 #if defined(CONFIG_STM32H5_MII) || defined(CONFIG_STM32H5_RMII)
 
   /* MDC and MDIO are common to both modes */
-
+# ifndef CONFIG_STM32H5_NO_PHY
   stm32_configgpio(GPIO_ETH_MDC);
   stm32_configgpio(GPIO_ETH_MDIO);
+# endif
 
   /* Set up the MII interface */
 
@@ -4193,12 +4189,10 @@ static inline int stm32_ethinitialize(int intf)
   priv->dev.d_private = g_stm32ethmac;  /* Used to recover private state */
   priv->intf          = intf;           /* Remember the interface number */
 
-  spin_lock_init(&priv->lock);          /* Initialize spinlock */
-
   stm32_get_uniqueid(uid);
   crc = crc64(uid, 12);
 
-  /* Specify as localy administrated address */
+  /* Specify as locally administrated address */
 
   priv->dev.d_mac.ether.ether_addr_octet[0]  = (crc >> 0) | 0x02;
   priv->dev.d_mac.ether.ether_addr_octet[0] &= ~0x1;

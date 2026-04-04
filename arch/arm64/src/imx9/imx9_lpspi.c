@@ -1798,6 +1798,8 @@ struct spi_dev_s *imx9_lpspibus_initialize(int bus)
 {
   struct imx9_lpspidev_s *priv = NULL;
 
+  irqstate_t flags = enter_critical_section();
+
 #ifdef CONFIG_IMX9_LPSPI1
   if (bus == 1)
     {
@@ -2015,6 +2017,7 @@ struct spi_dev_s *imx9_lpspibus_initialize(int bus)
   else
 #endif
     {
+      leave_critical_section(flags);
       spierr("ERROR: Unsupported SPI bus: %d\n", bus);
       return NULL;
     }
@@ -2058,6 +2061,7 @@ struct spi_dev_s *imx9_lpspibus_initialize(int bus)
     }
 #endif
 
+  leave_critical_section(flags);
   return (struct spi_dev_s *)priv;
 }
 
@@ -2065,7 +2069,7 @@ struct spi_dev_s *imx9_lpspibus_initialize(int bus)
  * Name: imx9_lpspibus_uninitialize
  *
  * Description:
- *   Unitialize the selected SPI bus
+ *   Uninitialize the selected SPI bus
  *
  * Input Parameters:
  *   dev -      Device-specific state data
@@ -2087,6 +2091,40 @@ void imx9_lpspi_uninitialize(struct spi_dev_s *dev)
           imx9_lpspi_modifyreg32(priv,
                                  IMX9_LPSPI_CR_OFFSET, LPSPI_CR_MEN, 0);
         }
+    }
+}
+
+/****************************************************************************
+ * Name: imx9_lpspi_select_cs
+ *
+ * Description:
+ *   Assert or de-assert internal PCS0 or PCS1 line. Can be called by
+ *   board-specific chip-select logic. Assertion of the CS is done at the
+ *   start of the next transfer and de-assertion after this function is
+ *   called again to de-assert the cs and the transfer has ended.
+ *
+ * Input Parameters:
+ *   dev    - Device-specific state data
+ *   cs     - Chip select 0 or 1
+ *   select - true: assert CS, false: de-assert CS
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void imx9_lpspi_select_cs(struct spi_dev_s *dev, int cs, bool select)
+{
+  struct imx9_lpspidev_s  *priv = (struct imx9_lpspidev_s *)dev;
+
+  if (select)
+    {
+      uint32_t pcs = (cs << LPSPI_TCR_PCS_SHIFT) & LPSPI_TCR_PCS_MASK;
+      imx9_lpspi_modifytcr(priv, LPSPI_TCR_PCS_MASK, pcs | LPSPI_TCR_CONT);
+    }
+  else
+    {
+      imx9_lpspi_modifytcr(priv, LPSPI_TCR_CONT, 0);
     }
 }
 

@@ -491,10 +491,12 @@ function refresh {
 }
 
 function run {
-  if [ ${RUN} -ne 0 ] && [ -z ${cmake} ]; then
-    run_script="$path/run"
+  if [ ${RUN} -ne 0 ]; then
+    run_script="$path/run.sh"
     if [ -x $run_script ]; then
       echo "  Running NuttX..."
+      export ARTIFACTCONFDIR=$ARTIFACTDIR/$(echo $config | sed "s/:/\//")/
+      export CURRENTCONFDIR=$(realpath $path)
       if ! $run_script; then
         fail=1
       fi
@@ -514,6 +516,7 @@ function dotest {
     if [[ "${check}" =~ ${re:1}$ ]]; then
       echo "Skipping: $1"
       skip=1
+      break
     fi
   done
 
@@ -523,6 +526,7 @@ function dotest {
       if [[ "${config/\//:}" == "${l}" ]]; then
         echo "Cmake in present: $1"
         cmake=1
+        break
       fi
     done
   fi

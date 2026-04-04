@@ -1,6 +1,9 @@
 /****************************************************************************
  * libs/libc/string/lib_bsdmemchr.c
  *
+ * SPDX-License-Identifier: BSD
+ * SPDX-FileCopyrightText: 1994-2009  Red Hat, Inc. All rights reserved
+ *
  * Copyright (c) 1994-2009  Red Hat, Inc. All rights reserved.
  *
  * This copyrighted material is made available to anyone wishing to use,
@@ -36,7 +39,7 @@
 
 #define LBLOCKSIZE (sizeof(long))
 
-/* Threshhold for punting to the bytewise iterator. */
+/* Threshold for punting to the bytewise iterator. */
 
 #define TOO_SMALL(len) ((len) < LBLOCKSIZE)
 
@@ -73,7 +76,8 @@
  ****************************************************************************/
 
 #if !defined(CONFIG_LIBC_ARCH_MEMCHR) && defined(LIBC_BUILD_MEMCHR)
-#undef memchr /* See mm/README.txt */
+#undef memchr
+no_builtin("memchr")
 FAR void *memchr(FAR const void *s, int c, size_t n)
 {
   FAR const unsigned char *p = (FAR const unsigned char *)s;

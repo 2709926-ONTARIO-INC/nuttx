@@ -570,7 +570,7 @@ static int usbhost_xboxcontroller_poll(int argc, FAR char *argv[])
 
   priv->polling = true;
   nxsem_post(&g_syncsem);
-  nxsig_sleep(1);
+  nxsched_sleep(1);
 
   /* Loop here until the device is disconnected */
 
@@ -1085,7 +1085,7 @@ static inline int usbhost_cfgdesc(FAR struct usbhost_state_s *priv,
   configdesc += cfgdesc->len;
   remaining  -= cfgdesc->len;
 
-  /* Loop where there are more dscriptors to examine */
+  /* Loop where there are more descriptors to examine */
 
   while (remaining >= sizeof(struct usb_desc_s) && !done)
     {

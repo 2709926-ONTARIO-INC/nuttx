@@ -40,13 +40,13 @@
 #  include <nuttx/macro.h>
 #endif
 
-/* Include NuttX-specific IRQ definitions */
-
-#include <nuttx/irq.h>
-
 /* Include chip-specific IRQ definitions (including IRQ numbers) */
 
 #include <arch/chip/irq.h>
+
+/* Include NuttX-specific IRQ definitions */
+
+#include <nuttx/irq.h>
 
 /****************************************************************************
  * Pre-processor Prototypes
@@ -154,10 +154,11 @@
 #define REG_SP_EL0          (34)
 #define REG_EXE_DEPTH       (35)
 #define REG_SCTLR_EL1       (36)
+#define REG_RESERVED        (37)
 
 /* In Armv8-A Architecture, the stack must align with 16 byte */
 
-#define ARM64_CONTEXT_REGS  (37)
+#define ARM64_CONTEXT_REGS  (38)
 #define ARM64_CONTEXT_SIZE  (8 * ARM64_CONTEXT_REGS)
 
 #ifdef CONFIG_ARCH_FPU
@@ -227,18 +228,24 @@
 #define XCPTCONTEXT_REGS    (ARM64_CONTEXT_REGS + FPU_CONTEXT_REGS)
 #define XCPTCONTEXT_SIZE    (8 * XCPTCONTEXT_REGS)
 
+#if XCPTCONTEXT_SIZE % 16 != 0
+#  error "ARM64_CONTEXT_REGS and FPU_CONTEXT_REGS must be an even number to ensure the stack is aligned to 16 bytes"
+#endif
+
 /* Friendly register names */
 
 #define REG_FP              REG_X29
 #define REG_LR              REG_X30
 
-#ifdef CONFIG_ARM64_DECODEFIQ
-#  define IRQ_DAIF_MASK (3)
-#else
-#  define IRQ_DAIF_MASK (2)
-#endif
+#define FIQ_DAIF_MASK       (1)
+#define IRQ_DAIF_MASK       (2)
+#define IRQ_FIQ_DAIF_MASK   (FIQ_DAIF_MASK | IRQ_DAIF_MASK)
 
-#define IRQ_SPSR_MASK (IRQ_DAIF_MASK << 6)
+#define IRQ_SPSR_MASK       (IRQ_DAIF_MASK << 6)
+
+/* AArch64 the stack-pointer must be 128-bit aligned */
+
+#define STACKFRAME_ALIGN    16
 
 #ifndef __ASSEMBLY__
 
@@ -256,7 +263,12 @@ extern "C"
 
 struct xcptcontext
 {
-#ifdef CONFIG_BUILD_KERNEL
+#ifdef CONFIG_ENABLE_ALL_SIGNALS
+  /* task context, for signal process */
+
+  uint64_t *saved_regs;
+
+#if defined(CONFIG_BUILD_KERNEL) || defined(CONFIG_BUILD_PROTECTED)
   /* This is the saved address to use when returning from a user-space
    * signal handler.
    */
@@ -264,16 +276,13 @@ struct xcptcontext
   uintptr_t sigreturn;
 
 #endif
+#endif /* CONFIG_ENABLE_ALL_SIGNALS */
   /* task stack reg context */
 
   uint64_t *regs;
 #ifndef CONFIG_BUILD_FLAT
   uint64_t *initregs;
 #endif
-
-  /* task context, for signal process */
-
-  uint64_t *saved_regs;
 
 #ifdef CONFIG_ARCH_FPU
   uint64_t *fpu_regs;
@@ -347,7 +356,11 @@ static inline_function irqstate_t up_irq_save(void)
       "mrs %0, daif\n"
       "msr daifset, %1\n"
       : "=r" (flags)
+#if defined(CONFIG_ARCH_TRUSTZONE_SECURE)
+      : "i" (FIQ_DAIF_MASK)
+#else
       : "i" (IRQ_DAIF_MASK)
+#endif
       : "memory"
     );
 
@@ -365,7 +378,13 @@ static inline_function irqstate_t up_irq_enable(void)
       "mrs %0, daif\n"
       "msr daifclr, %1\n"
       : "=r" (flags)
+#if defined(CONFIG_ARCH_HIPRI_INTERRUPT)
+      : "i" (IRQ_FIQ_DAIF_MASK)
+#elif defined(CONFIG_ARCH_TRUSTZONE_SECURE)
+      : "i" (FIQ_DAIF_MASK)
+#else
       : "i" (IRQ_DAIF_MASK)
+#endif
       : "memory"
     );
   return flags;
@@ -419,7 +438,7 @@ static inline_function void up_irq_restore(irqstate_t flags)
 
 #define write_sysreg(__val, reg)                    \
   ({                                                \
-    __asm__ volatile ("msr " STRINGIFY(reg) ", %0"  \
+    __asm__ volatile ("msr " STRINGIFY(reg) ", %x0"  \
                       : : "r" (__val) : "memory");  \
   })
 
@@ -461,7 +480,7 @@ static inline_function void up_irq_restore(irqstate_t flags)
  ****************************************************************************/
 
 #define up_getusrpc(regs) \
-    (((uintptr_t *)((regs) ? (regs) : running_regs()))[REG_ELR])
+    (((uintptr_t *)((regs) ? (regs) : (uint64_t *)running_regs()))[REG_ELR])
 
 #ifndef CONFIG_BUILD_KERNEL
 #  define up_getusrsp(regs) \

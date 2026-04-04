@@ -39,7 +39,7 @@
 #include <arpa/inet.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <nuttx/queue.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
@@ -512,7 +512,6 @@ struct lpc43_ethmac_s
   struct wdog_s        txtimeout;   /* TX timeout timer */
   struct work_s        irqwork;     /* For deferring work to the work queue */
   struct work_s        pollwork;    /* For deferring work to the work queue */
-  spinlock_t           lock;        /* Spinlock */
 
   /* This holds the information visible to the NuttX network */
 
@@ -1661,7 +1660,7 @@ static void lpc43_receive(struct lpc43_ethmac_s *priv)
         }
 
       /* We are finished with the RX buffer.  NOTE:  If the buffer is
-       * re-used for transmission, the dev->d_buf field will have been
+       * reused for transmission, the dev->d_buf field will have been
        * nullified.
        */
 
@@ -1892,7 +1891,7 @@ static void lpc43_interrupt_work(void *arg)
       lpc43_putreg(ETH_DMAINT_NIS, LPC43_ETH_DMASTAT);
     }
 
-  /* Handle error interrupt only if CONFIG_DEBUG_NET is eanbled */
+  /* Handle error interrupt only if CONFIG_DEBUG_NET is enabled */
 
 #ifdef CONFIG_DEBUG_NET
   /* Check if there are pending "abnormal" interrupts */
@@ -2098,6 +2097,9 @@ static int lpc43_ifup(struct net_driver_s *dev)
   up_enable_irq(LPC43M4_IRQ_ETHERNET);
 
   lpc43_checksetup();
+
+  netdev_carrier_on(dev);
+
   return OK;
 }
 
@@ -2127,7 +2129,7 @@ static int lpc43_ifdown(struct net_driver_s *dev)
 
   /* Disable the Ethernet interrupt */
 
-  flags = spin_lock_irqsave(&priv->lock);
+  flags = enter_critical_section();
   up_disable_irq(LPC43M4_IRQ_ETHERNET);
 
   /* Cancel the TX timeout timers */
@@ -2144,7 +2146,10 @@ static int lpc43_ifdown(struct net_driver_s *dev)
   /* Mark the device "down" */
 
   priv->ifup = false;
-  spin_unlock_irqrestore(&priv->lock, flags);
+  leave_critical_section(flags);
+
+  netdev_carrier_off(dev);
+
   return OK;
 }
 
@@ -3607,8 +3612,6 @@ static inline int lpc43_ethinitialize(void)
   priv->dev.d_ioctl   = lpc43_ioctl;    /* Support PHY ioctl() calls */
 #endif
   priv->dev.d_private = &g_lpc43ethmac; /* Used to recover private state from dev */
-
-  spin_lock_init(&priv->lock);          /* Initialize spinlock */
 
   /* Configure GPIO pins to support Ethernet */
 

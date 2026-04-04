@@ -91,11 +91,16 @@
 
 #include <nuttx/config.h>
 
+#include <assert.h>
+
 #include "hardware/stm32g4xxxx_pwr.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+static_assert(CONFIG_BOARD_LOOPSPERMSEC != -1,
+              "Configure BOARD_LOOPSPERMSEC to non-default value.");
 
 #if (STM32_SYSCLK_SW == RCC_CFGR_SW_HSE)
 #  define USE_HSE
@@ -753,6 +758,7 @@ static inline bool stm32_rcc_enablepll(void)
  * Pre-conditions:
  *   rcc_reset() and rcc_resetbkp() have been called and the HSI is
  *   the MCU's SYSCLK.
+ *
  ****************************************************************************/
 
 static void stm32_stdclockconfig(void)

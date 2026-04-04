@@ -212,6 +212,15 @@ include/stdarg.h: include/nuttx/lib/stdarg.h
 	$(Q) cp -f include/nuttx/lib/stdarg.h include/stdarg.h
 endif
 
+# Target used to copy include/nuttx/lib/stdbit.h.  If CONFIG_ARCH_STDBIT_H or
+# CONFIG_LIBC_STDBIT_GENERIC is set, copy stdbit.h to include/ for C23 bit
+# utilities.
+
+ifeq ($(firstword $(filter y, $(CONFIG_ARCH_STDBIT_H) $(CONFIG_LIBC_STDBIT_GENERIC))),y)
+include/stdbit.h: include/nuttx/lib/stdbit.h
+	$(Q) cp -f include/nuttx/lib/stdbit.h include/stdbit.h
+endif
+
 # Target used to copy include/nuttx/lib/setjmp.h.  If CONFIG_ARCH_SETJMP_H is
 # defined, then there is an architecture specific setjmp.h header file
 # that will be included indirectly from include/lib/setjmp.h.  But first, we
@@ -470,6 +479,10 @@ ifeq ($(CONFIG_ARCH_STDARG_H),y)
 context: include/stdarg.h
 endif
 
+ifeq ($(firstword $(filter y, $(CONFIG_ARCH_STDBIT_H) $(CONFIG_LIBC_STDBIT_GENERIC))),y)
+context: include/stdbit.h
+endif
+
 ifeq ($(CONFIG_ARCH_SETJMP_H),y)
 context: include/setjmp.h
 endif
@@ -631,12 +644,9 @@ checkpython3:
 SYSINFO_PARSE_FLAGS = "$(realpath $(TOPDIR))"
 SYSINFO_PARSE_FLAGS += "-finclude/sysinfo.h"
 
-SYSINFO_FLAGS = "-c"
-SYSINFO_FLAGS += "-p"
-SYSINFO_FLAGS += -f \""$(shell echo '$(CFLAGS)' | sed 's/"/\\\\\\"/g')"\"
-SYSINFO_FLAGS += \""$(shell echo '$(CXXFLAGS)' | sed 's/"/\\\\\\"/g')"\"
-SYSINFO_FLAGS += \""$(shell echo '$(LDFLAGS)' | sed 's/"/\\\\\\"/g')"\"
-SYSINFO_FLAGS += "--target_info"
+SYSINFO_FLAGS = -c
+SYSINFO_FLAGS += -p
+SYSINFO_FLAGS += --target_info
 
 # host_info: Parse nxdiag example output file (sysinfo.h) and print
 
@@ -753,6 +763,7 @@ savedefconfig: apps_preconfig
 	$(Q) grep "^CONFIG_ARCH_CHIP_" .config >> defconfig.tmp; true
 	$(Q) grep "CONFIG_ARCH_CHIP=" .config >> defconfig.tmp; true
 	$(Q) grep "CONFIG_ARCH_BOARD=" .config >> defconfig.tmp; true
+	$(Q) grep "CONFIG_ARCH_BOARD_COMMON=" .config >> defconfig.tmp; true
 	$(Q) grep "^CONFIG_ARCH_CUSTOM" .config >> defconfig.tmp; true
 	$(Q) grep "^CONFIG_ARCH_BOARD_CUSTOM" .config >> defconfig.tmp; true
 	$(Q) export LC_ALL=C; cat defconfig.tmp | sort | uniq > sortedconfig.tmp
@@ -777,8 +788,7 @@ savedefconfig: apps_preconfig
 # that the archiver is 'ar'
 
 export: $(NUTTXLIBS)
-	$(Q) ZIG="${ZIG}" ZIGFLAGS="${ZIGFLAGS}" MAKE="${MAKE}" \
-		$(MKEXPORT) $(MKEXPORT_ARGS) -l "$(EXPORTLIBS)"
+	$(Q) MAKE="${MAKE}" $(MKEXPORT) $(MKEXPORT_ARGS) -l "$(EXPORTLIBS)"
 
 # General housekeeping targets:  dependencies, cleaning, etc.
 #

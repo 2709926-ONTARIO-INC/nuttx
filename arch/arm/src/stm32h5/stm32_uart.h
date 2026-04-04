@@ -443,8 +443,7 @@
     defined(CONFIG_UART8_RXDMA)   || defined(CONFIG_UART9_RXDMA)  || \
     defined(CONFIG_USART10_RXDMA)  || defined(CONFIG_USART11_RXDMA) || \
     defined(CONFIG_USART12_RXDMA)
-#  define SERIAL_HAVE_DMA 0
-#  warning Serial DMA has not been implemented for STM32H5 chips.
+#  define SERIAL_HAVE_DMA 1
 #endif
 
 /* Is DMA used on the console UART? */
@@ -514,9 +513,9 @@
 #if defined(CONFIG_LPUART1_RS485) || defined(CONFIG_USART1_RS485) || \
     defined(CONFIG_USART2_RS485)  || defined(CONFIG_USART3_RS485) || \
     defined(CONFIG_UART4_RS485)   || defined(CONFIG_UART5_RS485)  || \
-    defined(CONFIG_USART6_RS485)   || defined(CONFIG_UART7_RS485) || \
+    defined(CONFIG_USART6_RS485)  || defined(CONFIG_UART7_RS485) || \
     defined(CONFIG_UART8_RS485)   || defined(CONFIG_UART9_RS485) || \
-    defined(CONFIG_USART10_RS485)  || defined(CONFIG_USART11_RS485) || \
+    defined(CONFIG_USART10_RS485) || defined(CONFIG_USART11_RS485) || \
     defined(CONFIG_UART12_RS485)
 #  define HAVE_RS485 1
 #endif

@@ -1074,7 +1074,7 @@ select either the FAT12 or FAT16 format. For historical reasons,
 if you want the FAT32 format, it must be explicitly specified on
 the command line.
 
-The ``-r`` option may be specified to select the the number of
+The ``-r`` option may be specified to select the number of
 entries in the root directory for FAT12 and FAT16 file systems.
 Typical values for small volumes would be 112 or 224; 512 should
 be used for large volumes, such as hard disks or very large SD
@@ -1640,7 +1640,7 @@ automatically started in ``nsh_main.c``. The exception is when
 enabled at initialization but rather must be enabled from the NSH
 command line or via other applications.
 
-In that case, when ``nsh_telnetstart()`` is called before the the
+In that case, when ``nsh_telnetstart()`` is called before the
 network is initialized, it will fail.
 
 .. _cmdtime:
@@ -1677,7 +1677,7 @@ The reported time is the elapsed time from starting of the command to
 completion of the command. This elapsed time may not necessarily be just
 the processing time for the command. It may included interrupt level
 processing, for example. In a busy system, command processing could be
-delayed if pre-empted by other, higher priority threads competing for
+delayed if preempted by other, higher priority threads competing for
 CPU time. So the reported time includes all CPU processing from the
 start of the command to its finish possibly including unrelated
 processing time during that interval.
@@ -1725,11 +1725,17 @@ reads as zero bytes.
 
 **Command Syntax**::
 
-  umount <dir-path>
+  umount [-f] <dir-path>
 
 **Synopsis**. Un-mount the file system at mount point ``<dir-path>``.
 The ``umount`` command can only be used to un-mount volumes previously
 mounted using :ref:`mount <cmdmount>` command.
+
+**Options**
+
+======  ======================================================
+``-f``  Force unmounting of the filesystem even if it is busy.
+======  ======================================================
 
 **Example**::
 

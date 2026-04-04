@@ -28,7 +28,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include "xtensa_attr.h"
+#include "esp_attr.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -144,6 +144,24 @@ size_t esp_spiram_get_size(void);
  */
 
 void esp_spiram_writeback_cache(void);
+
+/****************************************************************************
+ * Name: esp_spiram_writeback_range
+ *
+ * Description:
+ *   Writeback the Cache items (also clean the dirty bit) in the region from
+ *   DCache. If the region is not in DCache addr room, nothing will be done.
+ *
+ * Input Parameters:
+ *   addr - writeback region start address
+ *   size - writeback region size
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+void esp_spiram_writeback_range(uint32_t addr, uint32_t size);
 
 /* Description: Reserve a pool of internal memory for specific DMA/internal
  *              allocations.

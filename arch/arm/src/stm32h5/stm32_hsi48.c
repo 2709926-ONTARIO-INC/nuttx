@@ -57,7 +57,7 @@
  *   frequency which is subject to manufacturing process variations.
  *
  * Input Parameters:
- *   Identifies the syncrhonization source for the HSI48.  When used as the
+ *   Identifies the synchronization source for the HSI48.  When used as the
  *   USB source clock, this must be set to SYNCSRC_USB.
  *
  * Returned Value:
@@ -87,7 +87,7 @@ void stm32h5_enable_hsi48(enum syncsrc_e syncsrc)
 
   /* Wait for the HSI48 clock to stabilize */
 
-  while ((getreg32(STM32_RCC_CRRCR) & RCC_CRRCR_HSI48RDY) == 0);
+  while ((getreg32(STM32_RCC_CR) & RCC_CR_HSI48RDY) == 0);
 
   /* Return if no synchronization */
 

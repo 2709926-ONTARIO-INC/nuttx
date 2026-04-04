@@ -342,7 +342,27 @@
 #if CONFIG_ARCH_INTERRUPTSTACK > 15
 #if !defined(CONFIG_SMP) && !defined(CONFIG_ARCH_USE_S_MODE)
 .macro  setintstack tmp0, tmp1
-  la    sp, g_intstacktop
+
+  /* Load g_intstacktop (the start of the interrupt stack) */
+  la    \tmp0, g_intstacktop
+
+  /* Load g_intstackalloc (the end of the interrupt stack) */
+  la    \tmp1, g_intstackalloc
+
+  /* Check if sp is below g_intstackalloc (outside the interrupt stack) */
+  blt   sp, \tmp1, 1f
+
+  /* Check if sp is above g_intstacktop (outside the interrupt stack) */
+  bgt   sp, \tmp0, 1f
+
+  /* If sp is within the interrupt stack boundaries, no action is required */
+  j     2f
+
+1:
+  /* Set sp to g_intstacktop (switch to the interrupt stack) */
+  mv    sp, \tmp0
+
+2:
 .endm
 #endif /* !defined(CONFIG_SMP) && !defined(CONFIG_ARCH_USE_S_MODE) */
 #endif /* CONFIG_ARCH_INTERRUPTSTACK > 15 */
@@ -364,7 +384,7 @@
  * Name: riscv_set_inital_sp
  *
  * Description:
- *   Set inital sp for riscv core. This function should be only called
+ *   Set initial sp for riscv core. This function should be only called
  *   when initing.
  *
  *   sp (stack top) = sp base + idle stack size * hart id
@@ -391,11 +411,11 @@
   /* ensure the last XCPTCONTEXT_SIZE is reserved for non boot CPU */
 
   bnez \hartid, 998f
-  li   t1, STACK_ALIGN_DOWN(\size)
+  li   t1, STACKFRAME_ALIGN_DOWN(\size)
   j    999f
 
 998:
-  li   t1, STACK_ALIGN_DOWN(\size - XCPTCONTEXT_SIZE)
+  li   t1, STACKFRAME_ALIGN_DOWN(\size - XCPTCONTEXT_SIZE)
 
 999:
   add  t0, t0, t1

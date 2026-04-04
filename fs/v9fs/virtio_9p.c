@@ -127,6 +127,13 @@ static int virtio_9p_create(FAR struct v9fs_transport_s **transport,
   priv->transport.ops = &g_virtio_9p_transport_ops;
   *transport = &priv->transport;
   ret = virtio_register_driver(&priv->vdrv);
+  if (priv->vdev == NULL)
+    {
+      /* No corresponding driver was found, we should return an error */
+
+      ret = -ENODEV;
+    }
+
   if (ret < 0)
     {
       fs_heap_free(priv);
@@ -235,8 +242,8 @@ static int virtio_9p_probe(FAR struct virtio_device *vdev)
 
   virtio_read_config_member(vdev, struct virtio_9p_config_s, tag_len,
                             &config.tag_len);
-  virtio_read_config(vdev, offsetof(struct virtio_9p_config_s, tag),
-                     &config.tag, config.tag_len);
+  virtio_read_config_bytes(vdev, offsetof(struct virtio_9p_config_s, tag),
+                           &config.tag, config.tag_len);
   config.tag[config.tag_len] = '\0';
   if (strcmp(config.tag, priv->tag))
     {

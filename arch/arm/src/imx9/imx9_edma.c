@@ -192,7 +192,7 @@ static struct imx9_edmatcd_s *imx9_tcd_alloc(void)
   struct imx9_edmatcd_s *tcd;
   irqstate_t flags;
 
-  /* Take the 'dsem'.  When we hold the the 'dsem', then we know that one
+  /* Take the 'dsem'.  When we hold the 'dsem', then we know that one
    * TCD is reserved for us in the free list.
    *
    * NOTE: We use a critical section here because we may block waiting for
@@ -224,7 +224,7 @@ static struct imx9_edmatcd_s *imx9_tcd_alloc(void)
 #if CONFIG_IMX9_EDMA_NTCD > 0
 static void imx9_tcd_free_nolock(struct imx9_edmatcd_s *tcd)
 {
-  /* Add the the TCD to the end of the free list and post the 'dsem',
+  /* Add the TCD to the end of the free list and post the 'dsem',
    * possibly waking up another thread that might be waiting for
    * a TCD.
    */
@@ -237,14 +237,14 @@ static void imx9_tcd_free(struct imx9_edmatcd_s *tcd)
 {
   irqstate_t flags;
 
-  /* Add the the TCD to the end of the free list and post the 'dsem',
+  /* Add the TCD to the end of the free list and post the 'dsem',
    * possibly waking up another thread that might be waiting for
    * a TCD.
    */
 
-  flags = spin_lock_irqsave(&g_edma.lock);
+  flags = spin_lock_irqsave_nopreempt(&g_edma.lock);
   imx9_tcd_free_nolock(tcd);
-  spin_unlock_irqrestore(&g_edma.lock, flags);
+  spin_unlock_irqrestore_nopreempt(&g_edma.lock, flags);
 }
 #endif
 
@@ -472,7 +472,7 @@ static void imx9_dmaterminate(struct imx9_dmach_s *dmach, int result)
 
   irqstate_t flags;
 
-  flags = spin_lock_irqsave(&g_edma.lock);
+  flags = spin_lock_irqsave_nopreempt(&g_edma.lock);
 
   /* Disable channel IRQ requests */
 
@@ -524,7 +524,7 @@ static void imx9_dmaterminate(struct imx9_dmach_s *dmach, int result)
       callback((DMACH_HANDLE)dmach, arg, true, result);
     }
 
-  spin_unlock_irqrestore(&g_edma.lock, flags);
+  spin_unlock_irqrestore_nopreempt(&g_edma.lock, flags);
 }
 
 /****************************************************************************
@@ -905,7 +905,8 @@ void weak_function arm_dma_initialize(void)
 
   /* Initialize the channel */
 
-  for (i = 0; i < DMA4_CHANNEL_COUNT; i++, dmach++)
+  for (i = CONFIG_IMX9_EDMA5_CHAN_OFFSET;
+       i < CONFIG_IMX9_EDMA5_CHAN_COUNT; i++, dmach++)
     {
       dmach->base = IMX9_EDMA5_2_BASE;
       dmach->chan = i;
@@ -1327,7 +1328,7 @@ int imx9_dmach_xfrsetup(DMACH_HANDLE handle,
  *   this will be generated with the final TCD.
  *
  *   At the conclusion of the DMA, the DMA channel is reset, all TCDs are
- *   freed, and the callback function is called with the the success/fail
+ *   freed, and the callback function is called with the success/fail
  *   result of the DMA.
  *
  *   NOTE: On Rx DMAs (peripheral-to-memory or memory-to-memory), it is
@@ -1416,7 +1417,7 @@ void imx9_dmach_stop(DMACH_HANDLE handle)
  *
  * Description:
  *   This function checks the TCD (Task Control Descriptor) status for a
- *   specified eDMA channel and returns the the number of major loop counts
+ *   specified eDMA channel and returns the number of major loop counts
  *   that have not finished.
  *
  *   NOTES:

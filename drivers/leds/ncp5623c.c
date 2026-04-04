@@ -38,7 +38,7 @@
 #if defined(CONFIG_I2C) && defined(CONFIG_NCP5623C)
 
 /****************************************************************************
- * Private Type Definitions
+ * Private Types
  ****************************************************************************/
 
 struct ncp5623c_dev_s
@@ -159,7 +159,7 @@ static int ncp5623c_open(FAR struct file *filep)
 
   /* Let the chip settle a bit */
 
-  nxsig_usleep(1);
+  nxsched_usleep(1);
   return OK;
 }
 

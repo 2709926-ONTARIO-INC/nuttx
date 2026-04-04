@@ -63,7 +63,7 @@
  *   LED_SIGNAL          In a signal handler      No change
  *   LED_ASSERTION       An assertion failed      No change
  *   LED_PANIC           The system has crashed   Blinking
- *   LED_IDLE            STM32 is is sleep mode   Not used
+ *   LED_IDLE            STM32 is in sleep mode   Not used
  */
 
 #define LED_STARTED      0
@@ -74,5 +74,30 @@
 #define LED_SIGNAL       2
 #define LED_ASSERTION    2
 #define LED_PANIC        1
+
+/****************************************************************************
+ * The clock of MPSOC include low power field and Full power field
+ * The low power field include:
+ * I/O PLL(IOPLL) and RPU PLL(RPLL)
+ * The full power field include:
+ * APU PLL(APLL) Video PLL(VPLL) and DDR PLL(DPLL)
+
+ * There are 5 clock source:
+ * 1. PS_REF_CLK    (device pin, normal source).
+ * 2. ALT_REF_CLK   (one of two MIO pins).
+ * 3. VIDEO_REF_CLK (one of two MIO pins).
+ * 4. AUX_REF_CLK   (PL fabric source).
+ * 5. GTR_REF_CLK   (multiplexer output from GTR serial unit).
+ ****************************************************************************/
+
+/****************************************************************************
+ * Clock frequency definition
+ ****************************************************************************/
+
+#define CLK_CCF_VIDEO_CLK       27000000
+#define CLK_CCF_PSS_REF_CLK     33333333
+#define CLK_CCF_GT_CRX_REF_CLK  108000000
+#define CLK_CCF_AUX_REF_CLK     27000000
+#define CLK_CCF_ALT_REF_CLK     0
 
 #endif /* __BOARDS_ARM64_ZYNQ_MPSOC_ZCU111_INCLUDE_BOARD_H */

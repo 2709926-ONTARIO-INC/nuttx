@@ -181,7 +181,7 @@ uint32_t *arm_syscall(uint32_t *regs)
   cmd = regs[REG_R0];
 
   /* if cmd == SYS_restore_context (*running_task)->xcp.regs is valid
-   * should not be overwriten
+   * should not be overwritten
    */
 
   if (cmd != SYS_restore_context)
@@ -267,19 +267,24 @@ uint32_t *arm_syscall(uint32_t *regs)
 
         /* Update scheduler parameters */
 
-        nxsched_resume_scheduler(tcb);
+        nxsched_switch_context(*running_task, tcb);
 
       case SYS_restore_context:
-        nxsched_suspend_scheduler(*running_task);
+#ifdef CONFIG_ARCH_ADDRENV
+        addrenv_switch(tcb);
+        tcb = this_task();
+#endif
+        /* No context switch occurs in SYS_restore_context, or the
+         * context switch has been completed, so there is no
+         * need to update scheduler parameters.
+         */
+
         *running_task = tcb;
 
         /* Restore the cpu lock */
 
         restore_critical_section(tcb, cpu);
         regs = tcb->xcp.regs;
-#ifdef CONFIG_ARCH_ADDRENV
-        addrenv_switch(tcb);
-#endif
         break;
 
       /* R0=SYS_task_start:  This a user task start
@@ -298,18 +303,15 @@ uint32_t *arm_syscall(uint32_t *regs)
 #ifdef CONFIG_BUILD_PROTECTED
       case SYS_task_start:
         {
-          /* Set up to return to the user-space _start function in
-           * unprivileged mode.  We need:
-           *
-           *   R0   = argc
-           *   R1   = argv
-           *   PC   = taskentry
-           *   CSPR = user mode
+          /* Set up to return to the user-space task start-up function in
+           * unprivileged mode.
            */
 
-          regs[REG_PC]   = regs[REG_R1];
-          regs[REG_R0]   = regs[REG_R2];
-          regs[REG_R1]   = regs[REG_R3];
+          regs[REG_PC]   = (uint32_t)USERSPACE->task_startup & ~1;
+
+          regs[REG_R0]   = regs[REG_R1];
+          regs[REG_R1]   = regs[REG_R2];
+          regs[REG_R2]   = regs[REG_R3];
 
           cpsr           = regs[REG_CPSR] & ~PSR_MODE_MASK;
           regs[REG_CPSR] = cpsr | PSR_MODE_USR;
@@ -351,7 +353,7 @@ uint32_t *arm_syscall(uint32_t *regs)
         break;
 #endif
 
-#ifdef CONFIG_BUILD_PROTECTED
+#if defined(CONFIG_BUILD_PROTECTED) && defined(CONFIG_ENABLE_ALL_SIGNALS)
       /* R0=SYS_signal_handler:  This a user signal handler callback
        *
        * void signal_handler(_sa_sigaction_t sighand, int signo,
@@ -379,7 +381,7 @@ uint32_t *arm_syscall(uint32_t *regs)
            * unprivileged mode.
            */
 
-          regs[REG_PC]   = (uint32_t)ARCH_DATA_RESERVE->ar_sigtramp;
+          regs[REG_PC]   = (uint32_t)USERSPACE->signal_handler & ~1;
           cpsr           = regs[REG_CPSR] & ~PSR_MODE_MASK;
           regs[REG_CPSR] = cpsr | PSR_MODE_USR;
 
@@ -408,7 +410,7 @@ uint32_t *arm_syscall(uint32_t *regs)
 
               /* Copy "info" into user stack */
 
-              if ((rtcb->flags & TCB_FLAG_SIGDELIVER) != 0)
+              if (rtcb->sigdeliver)
                 {
                   usp = rtcb->xcp.saved_regs[REG_SP];
                 }
@@ -431,9 +433,7 @@ uint32_t *arm_syscall(uint32_t *regs)
 #endif
         }
         break;
-#endif
 
-#ifdef CONFIG_BUILD_PROTECTED
       /* R0=SYS_signal_handler_return:  This a user signal handler callback
        *
        *   void signal_handler_return(void);
@@ -472,7 +472,7 @@ uint32_t *arm_syscall(uint32_t *regs)
 #endif
         }
         break;
-#endif
+#endif /* CONFIG_BUILD_PROTECTED && CONFIG_ENABLE_ALL_SIGNALS */
 
       /* This is not an architecture-specific system call.  If NuttX is built
        * as a standalone kernel with a system call interface, then all of the

@@ -853,6 +853,10 @@ int bt_conn_security(FAR struct bt_conn_s *conn, enum bt_security_e sec)
       return -ENOTCONN;
     }
 
+  /* Store the requested security level */
+
+  conn->sec_level = sec;
+
   /* Nothing to do */
 
   if (sec == BT_SECURITY_LOW)
@@ -860,9 +864,9 @@ int bt_conn_security(FAR struct bt_conn_s *conn, enum bt_security_e sec)
       return 0;
     }
 
-  /* For now we only support JustWorks */
+  /* For now we only support Just Works and MITM with passkey (Legacy only) */
 
-  if (sec > BT_SECURITY_MEDIUM)
+  if (sec > BT_SECURITY_HIGH)
     {
       return -EINVAL;
     }
@@ -970,7 +974,7 @@ int bt_conn_disconnect(FAR struct bt_conn_s *conn, uint8_t reason)
  *
  * Description:
  *  Allows initiate new LE link to remote peer using its address.
- *  Returns a new reference that the the caller is responsible for managing.
+ *  Returns a new reference that the caller is responsible for managing.
  *
  * Input Parameters:
  *   peer - Remote address.

@@ -62,7 +62,7 @@ if(CONFIG_FRAME_POINTER)
 endif()
 
 if(CONFIG_STACK_CANARIES)
-  add_compile_options(-fstack-protector-all)
+  add_compile_options(${CONFIG_STACK_CANARIES_LEVEL})
 else()
   add_compile_options(-fno-stack-protector)
 endif()
@@ -75,6 +75,10 @@ if(${CONFIG_STACK_USAGE_WARNING})
   if(NOT ${CONFIG_STACK_USAGE_WARNING} STREQUAL 0)
     add_compile_options(-Wstack-usage=${CONFIG_STACK_USAGE_WARNING})
   endif()
+endif()
+
+if(CONFIG_ARCH_INSTRUMENT_ALL)
+  add_compile_options(-finstrument-functions)
 endif()
 
 if(CONFIG_COVERAGE_ALL)
@@ -121,6 +125,11 @@ add_compile_options(
   -Wno-attributes
   -Wno-unknown-pragmas
   $<$<COMPILE_LANGUAGE:C>:-Wstrict-prototypes>)
+
+# LLVM target definitions
+set(LLVM_ARCH "x86_64")
+set(LLVM_CPU "x86-64")
+set(LLVM_ABI "sysv")
 
 if(CONFIG_CXX_STANDARD)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-std=${CONFIG_CXX_STANDARD}>)

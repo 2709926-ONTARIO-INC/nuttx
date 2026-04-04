@@ -30,7 +30,7 @@
 #include <assert.h>
 #include <debug.h>
 
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <nuttx/arch.h>
 #include <arch/irq.h>
 
@@ -93,12 +93,6 @@ static const uint32_t g_h64mxpids[3] =
 #endif
 
 /****************************************************************************
- * Private Data
- ****************************************************************************/
-
-static spinlock_t g_irq_lock = SP_UNLOCKED;
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -113,6 +107,9 @@ static spinlock_t g_irq_lock = SP_UNLOCKED;
 #if defined(CONFIG_DEBUG_IRQ_INFO)
 static void sam_dumpaic(const char *msg, uintptr_t base, int irq)
 {
+  irqstate_t flags;
+
+  flags = enter_critical_section();
   irqinfo("AIC (%s, base=%08x irq=%d):\n", msg, base, irq);
 
   /* Select the register set associated with this irq */
@@ -154,6 +151,8 @@ static void sam_dumpaic(const char *msg, uintptr_t base, int irq)
           getreg32(base + SAM_AIC_DCR_OFFSET),
           getreg32(base + SAM_AIC_WPMR_OFFSET),
           getreg32(base + SAM_AIC_WPSR_OFFSET));
+
+  leave_critical_section(flags);
 }
 #else
 #  define sam_dumpaic(msg, base, irq)
@@ -537,6 +536,7 @@ void up_irqinitialize(void)
 
   /* And finally, enable interrupts */
 
+  arm_color_intstack();
   up_irq_enable();
 #endif
 }
@@ -671,7 +671,7 @@ static void sam_disable_irq(uintptr_t base, int irq)
     {
       /* These operations must be atomic */
 
-      flags = spin_lock_irqsave(&g_irq_lock);
+      flags = enter_critical_section();
 
       /* Select the register set associated with this irq */
 
@@ -681,7 +681,7 @@ static void sam_disable_irq(uintptr_t base, int irq)
 
       putreg32(AIC_IDCR_INTD, base + SAM_AIC_IDCR_OFFSET);
       sam_dumpaic("disable", base, irq);
-      spin_unlock_irqrestore(&g_irq_lock, flags);
+      leave_critical_section(flags);
     }
 #ifdef CONFIG_SAMA5_PIO_IRQ
   else
@@ -723,7 +723,7 @@ static void sam_enable_irq(uintptr_t base, int irq)
     {
       /* These operations must be atomic */
 
-      flags = spin_lock_irqsave(&g_irq_lock);
+      flags = enter_critical_section();
 
       /* Select the register set associated with this irq */
 
@@ -733,7 +733,7 @@ static void sam_enable_irq(uintptr_t base, int irq)
 
       putreg32(AIC_IECR_INTEN, base + SAM_AIC_IECR_OFFSET);
       sam_dumpaic("enable", base, irq);
-      spin_unlock_irqrestore(&g_irq_lock, flags);
+      leave_critical_section(flags);
     }
 #ifdef CONFIG_SAMA5_PIO_IRQ
   else
@@ -782,7 +782,7 @@ static int sam_prioritize_irq(uint32_t base, int irq, int priority)
     {
       /* These operations must be atomic */
 
-      flags = spin_lock_irqsave(&g_irq_lock);
+      flags = enter_critical_section();
 
       /* Select the register set associated with this irq */
 
@@ -803,7 +803,7 @@ static int sam_prioritize_irq(uint32_t base, int irq, int priority)
 
       putreg32(AIC_WPMR_WPKEY | AIC_WPMR_WPEN, base + SAM_AIC_WPMR_OFFSET);
       sam_dumpaic("prioritize", base, irq);
-      spin_unlock_irqrestore(&g_irq_lock, flags);
+      leave_critical_section(flags);
     }
 
   return OK;
@@ -845,7 +845,7 @@ static void _sam_irq_srctype(uintptr_t base, int irq,
 
   /* These operations must be atomic */
 
-  flags = spin_lock_irqsave(&g_irq_lock);
+  flags = enter_critical_section();
 
   /* Select the register set associated with this irq */
 
@@ -866,7 +866,7 @@ static void _sam_irq_srctype(uintptr_t base, int irq,
 
   putreg32(AIC_WPMR_WPKEY | AIC_WPMR_WPEN, base + SAM_AIC_WPMR_OFFSET);
   sam_dumpaic("srctype", base, irq);
-  spin_unlock_irqrestore(&g_irq_lock, flags);
+  leave_critical_section(flags);
 }
 
 void sam_irq_srctype(int irq, enum sam_srctype_e srctype)

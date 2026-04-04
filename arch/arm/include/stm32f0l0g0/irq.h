@@ -74,11 +74,13 @@
 #  include <arch/stm32f0l0g0/stm32l0_irq.h>
 #elif defined(CONFIG_ARCH_CHIP_STM32G0)
 #  include <arch/stm32f0l0g0/stm32g0_irq.h>
+#elif defined(CONFIG_ARCH_CHIP_STM32C0)
+#  include <arch/stm32f0l0g0/stm32c0_irq.h>
 #else
 #  error Unrecognized STM32 Cortex M0 family
 #endif
 
-#define NR_IRQS                 (STM32_IRQ_EXTINT + STM32_IRQ_NEXTINT)
+#define NR_IRQS                 (STM32_IRQ_EXTINT + STM32_IRQ_NEXTINTS)
 
 /****************************************************************************
  * Public Types

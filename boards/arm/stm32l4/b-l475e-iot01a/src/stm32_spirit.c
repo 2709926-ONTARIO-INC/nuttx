@@ -135,7 +135,7 @@ static int stm32l4_reset(const struct spirit_lower_s *lower)
 
   /* Wait minimum 1.5 ms to allow Spirit a proper boot-up sequence */
 
-  nxsig_usleep(1500);
+  nxsched_usleep(1500);
   return OK;
 }
 
@@ -212,7 +212,7 @@ static int stm32l4_spirit_devsetup(struct stm32l4_priv_s *priv)
   struct spi_dev_s *spi;
   int ret;
 
-  /* Configure the interrupt pin and SDN pins.  Innitializing the SDN to '1'
+  /* Configure the interrupt pin and SDN pins.  Initializing the SDN to '1'
    * powers down the Spirit.
    */
 

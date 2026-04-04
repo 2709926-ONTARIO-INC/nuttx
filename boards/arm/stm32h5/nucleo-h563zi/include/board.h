@@ -75,7 +75,7 @@
                                   RCC_PLL1CFGR_PLL1REN)
 #define STM32_PLLCFG_PLL1N        RCC_PLL1DIVR_PLL1N(100)
 #define STM32_PLLCFG_PLL1P        RCC_PLL1DIVR_PLL1P(2)
-#define STM32_PLLCFG_PLL1Q        RCC_PLL1DIVR_PLL1Q(2)
+#define STM32_PLLCFG_PLL1Q        RCC_PLL1DIVR_PLL1Q(4)
 #define STM32_PLLCFG_PLL1R        RCC_PLL1DIVR_PLL1R(2)
 #define STM32_PLLCFG_PLL1DIVR     (STM32_PLLCFG_PLL1N | \
                                    STM32_PLLCFG_PLL1P | \
@@ -84,7 +84,7 @@
 
 #define STM32_VC01_FRQ            ((STM32_HSE_FREQUENCY / 5) * 100)
 #define STM32_PLL1P_FREQUENCY     (STM32_VCO1_FRQ / 2)
-#define STM32_PLL1Q_FREQUENCY     (STM32_VCO1_FRQ / 2)
+#define STM32_PLL1Q_FREQUENCY     (STM32_VCO1_FRQ / 4)
 #define STM32_PLL1R_FREQUENCY     (STM32_VCO1_FRQ / 2)
 
 /* PLL2 config: Need to use for max ADC speed. */
@@ -120,7 +120,7 @@
                                    RCC_PLL1CFGR_PLL1REN)
 #define STM32_PLLCFG_PLL1N         RCC_PLL1DIVR_PLL1N(125)
 #define STM32_PLLCFG_PLL1P         RCC_PLL1DIVR_PLL1P(2)
-#define STM32_PLLCFG_PLL1Q         RCC_PLL1DIVR_PLL1Q(2)
+#define STM32_PLLCFG_PLL1Q         RCC_PLL1DIVR_PLL1Q(4)
 #define STM32_PLLCFG_PLL1R         RCC_PLL1DIVR_PLL1R(2)
 #define STM32_PLLCFG_PLL1DIVR     (STM32_PLLCFG_PLL1N | \
                                    STM32_PLLCFG_PLL1P | \
@@ -129,7 +129,7 @@
 
 #define STM32_VCO1_FRQ            ((STM32_HSI_FREQUENCY / 8) * 125)
 #define STM32_PLL1P_FREQUENCY     (STM32_VCO1_FRQ / 2)
-#define STM32_PLL1Q_FREQUENCY     (STM32_VCO1_FRQ / 2)
+#define STM32_PLL1Q_FREQUENCY     (STM32_VCO1_FRQ / 4)
 #define STM32_PLL1R_FREQUENCY     (STM32_VCO1_FRQ / 2)
 
 /* PLL2 config: Needed to use 2 ADC at max speed. */
@@ -152,8 +152,17 @@
 
 #if defined(CONFIG_STM32H5_USBFS) || defined(CONFIG_STM32H5_RNG)
 #  define STM32H5_USE_CLK48       1
+#endif
+
+#if defined(CONFIG_STM32H5_USBFS)
 #  define STM32H5_CLKUSB_SEL      RCC_CCIPR4_USBSEL_HSI48KERCK
+#  define STM32H5_HSI48_SYNCSRC   SYNCSRC_USB
+#else
 #  define STM32H5_HSI48_SYNCSRC   SYNCSRC_NONE
+#endif
+
+#if defined(CONFIG_STM32H5_RNG)
+#  define STM32H5_CLKRNG_SEL      RCC_CCIPR5_RNGSEL_HSI48KERCK
 #endif
 
 /* Enable LSE (for the RTC) */
@@ -167,8 +176,8 @@
 
 /* Configure the APB1 prescaler */
 
-#define STM32_RCC_CFGR2_PPRE1     RCC_CFGR2_PPRE1_HCLK1      /* PCLK1 = HCLK / 1 */
-#define STM32_PCLK1_FREQUENCY    (STM32_HCLK_FREQUENCY / 1)
+#define STM32_RCC_CFGR2_PPRE1     RCC_CFGR2_PPRE1_HCLK1d2      /* PCLK1 = HCLK / 2 */
+#define STM32_PCLK1_FREQUENCY    (STM32_HCLK_FREQUENCY / 2)
 
 #define STM32_APB1_TIM2_CLKIN    (STM32_PCLK1_FREQUENCY)
 #define STM32_APB1_TIM3_CLKIN    (STM32_PCLK1_FREQUENCY)
@@ -194,7 +203,7 @@
 
 /* Configure the APB3 prescaler */
 
-#define STM32_RCC_CFGR2_PPRE3     RCC_CFGR2_PPRE3_HCLK1      /* PCLK2 = HCLK / 1 */
+#define STM32_RCC_CFGR2_PPRE3     RCC_CFGR2_PPRE3_HCLK1      /* PCLK3 = HCLK / 1 */
 #define STM32_PCLK3_FREQUENCY    (STM32_HCLK_FREQUENCY / 1)
 
 #define STM32_APB3_LPTIM1_CLKIN  (STM32_PCLK3_FREQUENCY)
@@ -246,16 +255,6 @@
 #define STM32_RCC_CCIPR5_ADCDACSEL RCC_CCIPR5_ADCDACSEL_PLL2RCK
 #define STM32_ADC_CLK_FREQUENCY    STM32_PLL2R_FREQUENCY
 
-#define GPIO_ADC1_IN3   (GPIO_ADC1_IN3_0)
-#define GPIO_ADC1_IN10  (GPIO_ADC1_IN10_0)
-
-/* USART3: Connected to Arduino connector D0/D1 (or to STLink VCP if solder
- * bridges SB123 to SB130 are re-worked accordingly).
- */
-
-#define GPIO_USART3_RX   GPIO_USART3_RX_4    /* PD9 */
-#define GPIO_USART3_TX   GPIO_USART3_TX_4    /* PD8 */
-
 /* LED definitions **********************************************************/
 
 /* The Nucleo board has numerous LEDs but only three, LD1 a Green LED,
@@ -301,7 +300,7 @@
 #define LED_SIGNAL         5 /* In a signal handler      N/C    GLOW  N/C  */
 #define LED_ASSERTION      6 /* An assertion failed      GLOW   N/C   GLOW */
 #define LED_PANIC          7 /* The system has crashed   Blink  OFF   N/C  */
-#define LED_IDLE           8 /* MCU is is sleep mode     ON     OFF   OFF  */
+#define LED_IDLE           8 /* MCU is in sleep mode     ON     OFF   OFF  */
 
 /* Thus if the Green LED is statically on, NuttX has successfully booted and
  * is, apparently, running normally.  If the Red LED is flashing at
@@ -319,6 +318,40 @@
 #define BUTTON_USER        0
 #define NUM_BUTTONS        1
 #define BUTTON_USER_BIT    (1 << BUTTON_USER)
+
+/* Alternate function pin selections ****************************************/
+
+/* ADC GPIOs ****************************************************************/
+
+#define GPIO_ADC1_INP3   (GPIO_ADC1_INP3_0)
+#define GPIO_ADC1_INP10  (GPIO_ADC1_INP10_0)
+
+/* Timers / PWM */
+
+#define GPIO_TIM1_CH1OUT GPIO_TIM1_CH1OUT_2 /* PE9 */
+
+/* USART3 GPIOs *************************************************************/
+
+/* USART3 (Nucleo Virtual Console): Default board solder bridge configuration
+ * has USART3 going to the on board ST-Link to provide a VCP. Refer to
+ * STMicro user manual [UM3115] for more info on solder bridge configuration.
+ */
+
+#define GPIO_USART3_RX   GPIO_USART3_RX_4    /* PD9 */
+#define GPIO_USART3_TX   GPIO_USART3_TX_4    /* PD8 */
+
+/* USART2 GPIOs *************************************************************/
+
+#define GPIO_USART2_RX   GPIO_USART2_RX_2    /* PD6 */
+#define GPIO_USART2_TX   GPIO_USART2_TX_2    /* PD5 */
+
+/* FDCAN Clock Source and GPIOs *********************************************/
+
+#define STM32_FDCAN_FREQUENCY      STM32_PLL1Q_FREQUENCY
+#define STM32_RCC_CCIPR5_FDCANSEL  RCC_CCIPR5_FDCANSEL_PLL1QCK
+
+#define GPIO_FDCAN1_RX   GPIO_FDCAN1_RX_3    /* PD0 */
+#define GPIO_FDCAN1_TX   GPIO_FDCAN1_TX_4    /* PD1 */
 
 /****************************************************************************
  * Public Data

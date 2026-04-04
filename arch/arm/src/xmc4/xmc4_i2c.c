@@ -35,7 +35,7 @@
 
 #include <arch/board/board.h>
 #include <nuttx/mutex.h>
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 
 #include "arm_internal.h"
 #include "chip.h"
@@ -76,7 +76,7 @@
 #define XMC_I2C_CMD_READ (1U)
 
 #define I2C_WORDLENGTH (7U) /* 8 bits word length */
-#define I2C_TRM_MODE (3U)   /* Shift and transfert config */
+#define I2C_TRM_MODE (3U)   /* Shift and transfer config */
 
 #define I2C_TDV_SET (1U) /* A transmission of data in TBUF \
                           * can be started if TDV = 1 */
@@ -122,9 +122,8 @@ struct xmc4_i2cdev_s
   uint32_t sda_gpio;            /* GPIO config of SDA */
   uint32_t scl_gpio;            /* GPIO config of SCL */
 
-  mutex_t lock;                 /* Only one thread can access at a time */
-  spinlock_t spinlock;          /* Spinlock */
-  int refs;                     /* Reference count */
+  mutex_t lock; /* Only one thread can access at a time */
+  int refs;     /* Reference count */
 };
 
 /*****************************************************************************
@@ -199,7 +198,6 @@ static struct xmc4_i2cdev_s g_i2c0 =
   .scl_gpio = GPIO_I2C0_SCL,    /* See i2c_set_input_source */
   .frequency = (uint32_t)I2C_DEFAULT_FREQUENCY,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .refs = 0,
 };
 #endif
@@ -216,7 +214,6 @@ static struct xmc4_i2cdev_s g_i2c1 =
   .scl_gpio = GPIO_I2C1_SCL,    /* See i2c_set_input_source */
   .frequency = (uint32_t)I2C_DEFAULT_FREQUENCY,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .refs = 0,
 };
 #endif
@@ -233,7 +230,6 @@ static struct xmc4_i2cdev_s g_i2c2 =
   .scl_gpio = GPIO_I2C2_SCL,    /* See i2c_set_input_source */
   .frequency = (uint32_t)I2C_DEFAULT_FREQUENCY,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .refs = 0,
 };
 #endif
@@ -250,7 +246,6 @@ static struct xmc4_i2cdev_s g_i2c3 =
   .scl_gpio = GPIO_I2C3_SCL,    /* See i2c_set_input_source */
   .frequency = (uint32_t)I2C_DEFAULT_FREQUENCY,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .refs = 0,
 };
 #endif
@@ -267,7 +262,6 @@ static struct xmc4_i2cdev_s g_i2c4 =
   .scl_gpio = GPIO_I2C4_SCL,    /* See i2c_set_input_source */
   .frequency = (uint32_t)I2C_DEFAULT_FREQUENCY,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .refs = 0,
 };
 #endif
@@ -284,7 +278,6 @@ static struct xmc4_i2cdev_s g_i2c5 =
   .scl_gpio = GPIO_I2C5_SCL,    /* See i2c_set_input_source */
   .frequency = (uint32_t)I2C_DEFAULT_FREQUENCY,
   .lock = NXMUTEX_INITIALIZER,
-  .spinlock = SP_UNLOCKED,
   .refs = 0,
 };
 #endif
@@ -553,7 +546,7 @@ static bool i2c_get_status_flag(struct xmc4_i2cdev_s *priv,
  * Name: i2c_clear_status_flag
  *
  * Description:
- *   Clear the flags from PSR register by writting in PSCR register.
+ *   Clear the flags from PSR register by writing in PSCR register.
  *
  * Returned Value:
  *   Zero on success; a negated errno value on failure
@@ -640,7 +633,7 @@ static void i2c_fill_transmit_buffer(struct xmc4_i2cdev_s *priv,
  *   Get the data word from receive buffer.
  *
  * Returned Value:
- *   Recived data word in uint8_t.
+ *   Received data word in uint8_t.
  *
  *****************************************************************************/
 
@@ -667,7 +660,7 @@ static uint8_t i2c_get_receive_buffer(struct xmc4_i2cdev_s *priv)
  * Name: i2c_start
  *
  * Description:
- *   Start and send an I2C frame with the given slave adress.
+ *   Start and send an I2C frame with the given slave address.
  *   Send the following on bus : [START/RESTART A6 A5 A4 A3 A2 A1 A0 R/W]
  *
  *****************************************************************************/
@@ -822,9 +815,9 @@ static int i2c_transfer(struct i2c_master_s *dev,
 
   nxmutex_lock(&priv->lock);
 
-  /* Enter critical section to avoid interrupts during i2c transfert */
+  /* Enter critical section to avoid interrupts during i2c transfer */
 
-  irqstate_t state = spin_lock_irqsave(&priv->spinlock);
+  irqstate_t state = enter_critical_section();
 
   for (int i = 0; i < count; i++)
     {
@@ -844,8 +837,8 @@ static int i2c_transfer(struct i2c_master_s *dev,
             }
           else
             {
-              spin_unlock_irqrestore(&priv->spinlock, state);
               i2cerr("Can't update frequency between Start & Stop symbols\n");
+              leave_critical_section(state);
               nxmutex_unlock(&priv->lock);
               return -EINVAL;
             }
@@ -921,7 +914,7 @@ static int i2c_transfer(struct i2c_master_s *dev,
 
       bool should_stop = !(message_has_no_stop || next_message_has_no_start);
 
-      /* TODO : Should you stop when last msg and overide flags ? */
+      /* TODO : Should you stop when last msg and override flags ? */
 
       if (should_stop)
         {
@@ -933,7 +926,7 @@ static int i2c_transfer(struct i2c_master_s *dev,
         }
     }
 
-  spin_unlock_irqrestore(&priv->spinlock, state);
+  leave_critical_section(state);
   nxmutex_unlock(&priv->lock);
   return ret;
 }

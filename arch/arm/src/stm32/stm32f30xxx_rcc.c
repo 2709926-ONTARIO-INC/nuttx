@@ -24,9 +24,14 @@
  * Included Files
  ****************************************************************************/
 
+#include <assert.h>
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+static_assert(CONFIG_BOARD_LOOPSPERMSEC != -1,
+              "Configure BOARD_LOOPSPERMSEC to non-default value.");
 
 /* Allow up to 100 milliseconds for the high speed clock to become ready.
  * that is a very long delay, but if the clock does not become ready we are
@@ -550,7 +555,7 @@ static void stm32_stdclockconfig(void)
 #endif
 
 #if defined(CONFIG_STM32_RTC_LSECLOCK)
-  /* Normally peripheral clocks are enabled later in bootup, but we need
+  /* Normally peripheral clocks are enabled later in boot up, but we need
    * clock on PWR *now* as without this setting registers that enable LSE
    * won't work.
    *

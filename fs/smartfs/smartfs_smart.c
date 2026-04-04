@@ -258,7 +258,7 @@ static int smartfs_open(FAR struct file *filep, FAR const char *relpath,
 
   if (ret == OK)
     {
-      /* The name exists -- but is is a file or a directory? */
+      /* The name exists -- but is it a file or a directory? */
 
       if (sf->entry.flags & SMARTFS_DIRENT_TYPE_DIR)
         {
@@ -795,6 +795,28 @@ static ssize_t smartfs_write(FAR struct file *filep, FAR const char *buffer,
           sf->currsector = SMARTFS_NEXTSECTOR(header);
         }
     }
+
+#ifdef CONFIG_SMARTFS_USE_SECTOR_BUFFER
+
+  /* If data is written to a forward position using seek, the sector
+   * buffer must be updated because it may be referenced later.
+   */
+
+  if (byteswritten > 0)
+    {
+      readwrite.logsector = sf->currsector;
+      readwrite.offset = 0;
+      readwrite.count = fs->fs_llformat.availbytes;
+      readwrite.buffer = (FAR uint8_t *)sf->buffer;
+      ret = FS_IOCTL(fs, BIOC_READSECT, (unsigned long)&readwrite);
+      if (ret < 0)
+        {
+          ferr("ERROR: Error %d reading sector %d\n", ret, sf->currsector);
+          goto errout_with_lock;
+        }
+    }
+
+#endif /* CONFIG_SMARTFS_USE_SECTOR_BUFFER */
 
   /* Now append data to end of the file. */
 

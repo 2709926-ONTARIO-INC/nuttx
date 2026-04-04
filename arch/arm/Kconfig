@@ -45,7 +45,7 @@ config ARM_TOOLCHAIN_CLANG
 
 config ARM_TOOLCHAIN_ARMCLANG
 	bool "ARM Compiler Clang toolchain"
-	select ARCH_TOOLCHAIN_CLANG
+	select ARCH_TOOLCHAIN_ARMCLANG
 
 config ARM_TOOLCHAIN_GHS
 	bool "ARM Compiler Green Hills Software toolchain"
@@ -115,7 +115,6 @@ config ARCH_CHIP_CSK6
 	select ARCH_HAVE_TICKLESS
 	select ARCH_HAVE_TIMEKEEPING
 	select ARM_HAVE_MPU_UNIFIED
-	select ARMV8M_HAVE_STACKCHECK
 	select ARCH_HAVE_ADJTIME
 	select ARCH_CORTEXM33
 	---help---
@@ -354,6 +353,19 @@ config ARCH_CHIP_NUC1XX
 	---help---
 		Nuvoton NUC100/120 architectures (ARM Cortex-M0).
 
+config ARCH_CHIP_MCX_NXXX
+	bool "NXP MCX NXXx Cortex-M33"
+	select ARCH_CORTEXM33
+	select ARCH_HAVE_FPU
+	select ARCH_HAVE_DFPU
+	---help---
+		NXXx architectures (Cortex-M33)
+
+config ARCH_CHIP_RA4
+	bool "Renesas RA4"
+	---help---
+		Renesas RA4 Architecture (ARM Cortex-M4F/M33).
+
 config ARCH_CHIP_RP2040
 	bool "Raspberry Pi RP2040"
 	select ARCH_CORTEXM0
@@ -374,6 +386,8 @@ config ARCH_CHIP_RP23XX
 	select ARCH_HAVE_MULTICPU
 	select ARCH_HAVE_I2CRESET
 	select ARM_HAVE_WFE_SEV
+	select ARM_HAVE_DSP
+	select ARCH_HAVE_FPU
 	select ARCH_HAVE_CUSTOM_TESTSET
 	select ARCH_HAVE_PWM_MULTICHAN
 	select ARCH_BOARD_COMMON
@@ -497,13 +511,20 @@ config ARCH_CHIP_STM32L0
 	bool "STMicro STM32 L0"
 	select ARCH_CORTEXM0
 	---help---
-		STMicro STM32L0 architectures (ARM Cortex-M0).
+		STMicro STM32L0 architectures (ARM Cortex-M0+).
 
 config ARCH_CHIP_STM32G0
 	bool "STMicro STM32 G0"
 	select ARCH_CORTEXM0
+	select ARCH_HAVE_PROGMEM
 	---help---
-		STMicro STM32G0 architectures (ARM Cortex-M0).
+		STMicro STM32G0 architectures (ARM Cortex-M0+).
+
+config ARCH_CHIP_STM32C0
+	bool "STMicro STM32 C0"
+	select ARCH_CORTEXM0
+	---help---
+		STMicro STM32C0 architectures (ARM Cortex-M0+).
 
 config ARCH_CHIP_STM32F7
 	bool "STMicro STM32 F7"
@@ -563,7 +584,6 @@ config ARCH_CHIP_STM32H5
 	select ARCH_HAVE_TICKLESS
 	select ARCH_HAVE_TRUSTZONE
 	select ARM_HAVE_MPU_UNIFIED
-	select ARMV8M_HAVE_STACKCHECK
 	---help---
 		STMicro STM32 H5 architectures (ARM Cortex-M33).
 
@@ -579,7 +599,6 @@ config ARCH_CHIP_STM32L5
 	select ARCH_HAVE_TICKLESS
 	select ARCH_HAVE_TRUSTZONE
 	select ARM_HAVE_MPU_UNIFIED
-	select ARMV8M_HAVE_STACKCHECK
 	---help---
 		STMicro STM32 L5 architectures (ARM Cortex-M33).
 
@@ -595,7 +614,6 @@ config ARCH_CHIP_STM32U5
 	select ARCH_HAVE_SPI_BITORDER
 	select ARCH_HAVE_TICKLESS
 	select ARM_HAVE_MPU_UNIFIED
-	select ARMV8M_HAVE_STACKCHECK
 	select ARCH_HAVE_TRUSTZONE
 	---help---
 		STMicro STM32 U5 architectures (ARM Cortex-M33).
@@ -760,6 +778,14 @@ config ARCH_CHIP_CXD32XX
 	select LIBC_ARCH_ATOMIC
 	---help---
 		Sony CXD32XX (ARM Cortex-M4) architectures
+
+config ARCH_CHIP_HT32F491X3
+	bool "Holtek HT32F491x3"
+	select ARCH_CORTEXM4
+	select ARCH_HAVE_FPU
+	select LIBC_ARCH_ATOMIC
+	---help---
+		Holtek HT32F491x3 (ARM Cortex-M4) architectures
 
 config ARCH_CHIP_ARM_CUSTOM
 	bool "Custom ARM chip"
@@ -930,6 +956,7 @@ config ARCH_ARMV7A
 	bool
 	default n
 	select ARCH_HAVE_CPUINFO
+	select ARCH_HAVE_DEBUG
 	select ARCH_HAVE_PERF_EVENTS
 	select ARM_HAVE_WFE_SEV
 
@@ -982,6 +1009,7 @@ config ARCH_ARMV7R
 	default n
 	select ARCH_HAVE_CPUINFO
 	select ARCH_HAVE_PERF_EVENTS
+	select ARCH_HAVE_PERF_EVENTS_USER_ACCESS
 
 config ARCH_CORTEXR4
 	bool
@@ -1111,6 +1139,7 @@ config ARCH_ARMV8R
 	select ARCH_HAVE_CPUINFO
 	select ARCH_HAVE_PERF_EVENTS
 	select ONESHOT
+	select ONESHOT_COUNT
 	select ALARM_ARCH
 
 
@@ -1154,6 +1183,7 @@ config ARCH_CHIP
 	default "nrf53"		if ARCH_CHIP_NRF53
 	default "nrf91"		if ARCH_CHIP_NRF91
 	default "nuc1xx"	if ARCH_CHIP_NUC1XX
+	default "ra4"			if ARCH_CHIP_RA4
 	default "rp2040"	if ARCH_CHIP_RP2040
 	default "rp23xx"	if ARCH_CHIP_RP23XX
 	default "s32k1xx"	if ARCH_CHIP_S32K1XX
@@ -1164,7 +1194,7 @@ config ARCH_CHIP
 	default "sam34"		if ARCH_CHIP_SAM34
 	default "samv7"		if ARCH_CHIP_SAMV7
 	default "stm32"		if ARCH_CHIP_STM32
-	default "stm32f0l0g0"	if ARCH_CHIP_STM32F0 || ARCH_CHIP_STM32L0 || ARCH_CHIP_STM32G0
+	default "stm32f0l0g0"	if ARCH_CHIP_STM32F0 || ARCH_CHIP_STM32L0 || ARCH_CHIP_STM32G0 || ARCH_CHIP_STM32C0
 	default "stm32f7"	if ARCH_CHIP_STM32F7
 	default "stm32h7"	if ARCH_CHIP_STM32H7
 	default "stm32l4"	if ARCH_CHIP_STM32L4
@@ -1185,7 +1215,9 @@ config ARCH_CHIP
 	default "goldfish"	if ARCH_CHIP_GOLDFISH_ARM
 	default "at32"		if ARCH_CHIP_AT32
 	default "cxd32xx"	if ARCH_CHIP_CXD32XX
+	default "ht32f491x3"	if ARCH_CHIP_HT32F491X3
 	default "csk6"		if ARCH_CHIP_CSK6
+	default "mcx-nxxx"	if ARCH_CHIP_MCX_NXXX
 
 config ARM_THUMB
 	bool "Thumb Mode"
@@ -1253,6 +1285,26 @@ config ARM_FPU_ABI_SOFT
 	depends on ARCH_HAVE_FPU
 	---help---
 		Pass float value via integer register (-mfloat-abi=softfp)
+
+config ARM_BUSY_WAIT
+	bool "Busy wait when boot"
+	default n
+	depends on ARCH_HAVE_MULTICPU
+	---help---
+		On a system with multiple CPU cores, when the system is powered on,
+		multiple cores may start running simultaneously. In this case, software
+		is required to handle the startup logic for multi-core synchronization.
+		One approach is to use global variables.
+		however, the global variable region may not have been initialized yet.
+		In such scenarios, we can use a busywait flag to
+		implement the synchronization strategy.
+
+config ARM_BUSY_WAIT_FLAG_ADDR
+	hex "Busy wait flag address"
+	depends on ARM_BUSY_WAIT
+	---help---
+		The busywait address is typically a region that is initialized to 0
+		during the boot phase.
 
 config ARM_DPFPU32
 	bool "FPU with 32 double-precision register"
@@ -1437,6 +1489,12 @@ config DEBUG_SECUREFAULT
 		output is sometimes helpful when debugging difficult usage fault problems,
 		but may be more than you typically want to see.
 
+config ARM_SEMIHOSTING_POWEROFF
+	bool "Semihosting POWEROFF support"
+	default n
+	---help---
+		Enable use of semihosting function to poweroff target.
+
 config ARM_SEMIHOSTING_SYSLOG
 	bool "Semihosting SYSLOG support"
 	select SYSLOG_REGISTER
@@ -1458,7 +1516,7 @@ config ARM_SEMIHOSTING_HOSTFS_CACHE_COHERENCE
 	bool "Cache coherence in semihosting hostfs"
 	depends on ARCH_DCACHE
 	---help---
-		Flush & Invalidte cache before & after bkpt instruction.
+		Flush & Invalidate cache before & after bkpt instruction.
 
 endif # ARM_SEMIHOSTING_HOSTFS
 
@@ -1609,6 +1667,9 @@ endif
 if ARCH_CHIP_NUC1XX
 source "arch/arm/src/nuc1xx/Kconfig"
 endif
+if ARCH_CHIP_RA4
+source "arch/arm/src/ra4/Kconfig"
+endif
 if ARCH_CHIP_RP2040
 source "arch/arm/src/rp2040/Kconfig"
 endif
@@ -1633,7 +1694,7 @@ endif
 if ARCH_CHIP_STM32
 source "arch/arm/src/stm32/Kconfig"
 endif
-if ARCH_CHIP_STM32F0 || ARCH_CHIP_STM32L0 || ARCH_CHIP_STM32G0
+if ARCH_CHIP_STM32F0 || ARCH_CHIP_STM32L0 || ARCH_CHIP_STM32G0 || ARCH_CHIP_STM32C0
 source "arch/arm/src/stm32f0l0g0/Kconfig"
 endif
 if ARCH_CHIP_STM32F7
@@ -1695,5 +1756,11 @@ source "arch/arm/src/at32/Kconfig"
 endif
 if ARCH_CHIP_CXD32XX
 source "arch/arm/src/cxd32xx/Kconfig"
+endif
+if ARCH_CHIP_HT32F491X3
+source "arch/arm/src/ht32f491x3/Kconfig"
+endif
+if ARCH_CHIP_MCX_NXXX
+source "arch/arm/src/mcx-nxxx/Kconfig"
 endif
 endif # ARCH_ARM

@@ -480,7 +480,7 @@ int up_rtc_gettime(struct timespec *tp)
   uint8_t regval;
   struct tm t;
 
-  flags = spin_lock_irqsave(&g_rtc_lock);
+  flags = spin_lock_irqsave_nopreempt(&g_rtc_lock);
 
   if (RTC.RCR2.BIT.START == 0)
     {
@@ -548,7 +548,7 @@ int up_rtc_gettime(struct timespec *tp)
   UNUSED(mincnt);
   UNUSED(seccnt);
 
-  spin_unlock_irqrestore(&g_rtc_lock, flags);
+  spin_unlock_irqrestore_nopreempt(&g_rtc_lock, flags);
   return OK;
 }
 #endif
@@ -576,7 +576,7 @@ int rx65n_rtc_setdatetime(const struct tm *tp)
    *   tm_min    0-59  MIN    (0-59)
    *   tm_hour   0-23  HOUR   (0-23)
    *
-   *  *To allow for leap seconds.  But these never actuall happen.
+   *  *To allow for leap seconds.  But these never actually happen.
    */
 
   /* Stop all counters */
@@ -728,7 +728,7 @@ int up_rtc_settime(const struct timespec *tp)
    *   tm_min    0-59  MIN    (0-59)
    *   tm_hour   0-23  HOUR   (0-23)
    *
-   *  *To allow for leap seconds.  But these never actuall happen.
+   *  *To allow for leap seconds.  But these never actually happen.
    */
 
   /* Stop all counters */
@@ -1312,7 +1312,7 @@ int up_rtc_getdatetime(struct tm *tp)
    *   tm_min    0-59  MIN    (0-59)
    *   tm_hour   0-23  HOUR   (0-23)
    *
-   *  *To allow for leap seconds.  But these never actuall happen.
+   *  *To allow for leap seconds.  But these never actually happen.
    */
 
   /* Disable ICU CUP interrupt */

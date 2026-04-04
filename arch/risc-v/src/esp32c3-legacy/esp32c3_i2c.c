@@ -40,7 +40,7 @@
 #include <sys/time.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 #include <nuttx/clock.h>
 #include <nuttx/mutex.h>
 #include <nuttx/semaphore.h>
@@ -223,7 +223,6 @@ struct esp32c3_i2c_priv_s
   const struct esp32c3_i2c_config_s *config;
   int refs;                    /* Reference count */
   mutex_t lock;                /* Mutual exclusion mutex */
-  spinlock_t spinlock;         /* Spinlock */
 
 #ifndef CONFIG_I2C_POLLED
   sem_t sem_isr;               /* Interrupt wait semaphore */
@@ -334,7 +333,6 @@ static struct esp32c3_i2c_priv_s esp32c3_i2c0_priv =
   .config     = &esp32c3_i2c0_config,
   .refs       = 0,
   .lock       = NXMUTEX_INITIALIZER,
-  .spinlock   = SP_UNLOCKED,
 #ifndef CONFIG_I2C_POLLED
   .sem_isr    = SEM_INITIALIZER(0),
 #endif
@@ -822,7 +820,7 @@ static int esp32c3_i2c_sem_waitdone(struct esp32c3_i2c_priv_s *priv)
  *   priv          - Pointer to the internal driver state structure.
  *
  * Returned Values:
- *   Zero (OK) is returned on successfull transfer. -ETIMEDOUT is returned
+ *   Zero (OK) is returned on successful transfer. -ETIMEDOUT is returned
  *   in case a transfer didn't finish within the timeout interval. And ERROR
  *   is returned in case of any I2C error during the transfer has happened.
  *
@@ -1100,7 +1098,7 @@ static int esp32c3_i2c_reset(struct i2c_master_s *dev)
 
   DEBUGASSERT(priv->refs > 0);
 
-  flags = spin_lock_irqsave(&priv->spinlock);
+  flags = enter_critical_section();
 
   esp32c3_i2c_reset_fsmc(priv);
 
@@ -1113,7 +1111,7 @@ static int esp32c3_i2c_reset(struct i2c_master_s *dev)
   priv->bytes      = 0;
   priv->ready_read = false;
 
-  spin_unlock_irqrestore(&priv->spinlock, flags);
+  leave_critical_section(flags);
 
   return OK;
 }

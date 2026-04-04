@@ -81,7 +81,7 @@
 #define STATUS_LINELEN PATH_MAX
 
 /****************************************************************************
- * Private Type Definitions
+ * Private Types
  ****************************************************************************/
 
 /* This enumeration identifies all of the task/thread nodes that can be
@@ -640,10 +640,11 @@ static ssize_t proc_status(FAR struct proc_file_s *procfile,
     }
 
   /* Show the signal mask. Note: sigset_t is uint32_t on NuttX. */
-
+#ifndef CONFIG_DISABLE_ALL_SIGNALS
   linesize = procfs_snprintf(procfile->line, STATUS_LINELEN,
                              "%-12s" SIGSET_FMT "\n",
                              "SigMask:", SIGSET_ELEM(&tcb->sigprocmask));
+#endif
   copysize = procfs_memcpy(procfile->line, linesize, buffer, remaining,
                            &offset);
 
@@ -843,6 +844,69 @@ static ssize_t proc_critmon(FAR struct proc_file_s *procfile,
     }
 #endif /* CONFIG_SCHED_CRITMONITOR_MAXTIME_CSECTION >= 0 */
 
+  /* Convert and generate output for max busywait time && all busywait time */
+
+#if CONFIG_SCHED_CRITMONITOR_MAXTIME_BUSYWAIT >= 0
+  if (tcb->busywait_max > 0)
+    {
+      perf_convert(tcb->busywait_max, &maxtime);
+    }
+  else
+    {
+      maxtime.tv_sec = 0;
+      maxtime.tv_nsec = 0;
+    }
+
+  /* Reset the maximum */
+
+  tcb->busywait_max = 0;
+
+  /* Generate output for max busywait time */
+
+  linesize = procfs_snprintf(procfile->line, STATUS_LINELEN, "%lu.%09lu %p,",
+                             (unsigned long)maxtime.tv_sec,
+                             (unsigned long)maxtime.tv_nsec,
+                             tcb->busywait_max_caller);
+  copysize = procfs_memcpy(procfile->line, linesize, buffer, remaining,
+                           &offset);
+
+  totalsize += copysize;
+  buffer    += copysize;
+  remaining -= copysize;
+
+  if (totalsize >= buflen)
+    {
+      return totalsize;
+    }
+
+  if (tcb->busywait_total > 0)
+    {
+      perf_convert(tcb->busywait_total, &maxtime);
+    }
+  else
+    {
+      maxtime.tv_sec = 0;
+      maxtime.tv_nsec = 0;
+    }
+
+  /* Generate output for all busywait time */
+
+  linesize = procfs_snprintf(procfile->line, STATUS_LINELEN, "%lu.%09lu,",
+                             (unsigned long)maxtime.tv_sec,
+                             (unsigned long)maxtime.tv_nsec);
+  copysize = procfs_memcpy(procfile->line, linesize, buffer, remaining,
+                           &offset);
+
+  totalsize += copysize;
+  buffer    += copysize;
+  remaining -= copysize;
+
+  if (totalsize >= buflen)
+    {
+      return totalsize;
+    }
+#endif /* CONFIG_SCHED_CRITMONITOR_MAXTIME_BUSYWAIT >= 0 */
+
   /* Convert and generate output for maximum time thread running */
 #if CONFIG_SCHED_CRITMONITOR_MAXTIME_THREAD >= 0
   if (tcb->run_max > 0)
@@ -966,12 +1030,12 @@ static ssize_t proc_heapcheck_write(FAR struct proc_file_s *procfile,
                                     FAR const char *buffer,
                                     size_t buflen, off_t offset)
 {
-  switch (atoi(buffer))
+  switch (buffer[0])
     {
-      case 0:
+      case '0':
         tcb->flags &= ~TCB_FLAG_HEAP_CHECK;
         break;
-      case 1:
+      case '1':
         tcb->flags |= TCB_FLAG_HEAP_CHECK;
         break;
       default:
@@ -1054,8 +1118,10 @@ static ssize_t proc_stack(FAR struct proc_file_s *procfile,
 
   /* Show the stack size */
 
-  linesize   = procfs_snprintf(procfile->line, STATUS_LINELEN, "%-12s%ld\n",
-                               "StackUsed:", (long)up_check_tcbstack(tcb));
+  linesize = procfs_snprintf(
+      procfile->line, STATUS_LINELEN, "%-12s%zu\n",
+      "StackUsed:", up_check_tcbstack(tcb, tcb->adj_stack_size));
+
   copysize   = procfs_memcpy(procfile->line, linesize, buffer, remaining,
                              &offset);
 
@@ -1252,7 +1318,6 @@ static ssize_t proc_groupfd(FAR struct proc_file_s *procfile,
                             size_t buflen, off_t offset)
 {
   FAR struct task_group_s *group = tcb->group;
-  FAR struct file *filep;
   FAR char *path;
   size_t remaining;
   size_t linesize;
@@ -1263,7 +1328,7 @@ static ssize_t proc_groupfd(FAR struct proc_file_s *procfile,
 
   DEBUGASSERT(group != NULL);
 
-  count = files_countlist(&group->tg_filelist);
+  count = fdlist_count(&group->tg_fdlist);
   if (count == 0)
     {
       return 0;
@@ -1303,11 +1368,12 @@ static ssize_t proc_groupfd(FAR struct proc_file_s *procfile,
 
   for (i = 0; i < count; i++)
     {
-      filep = files_fget(&group->tg_filelist, i);
+      FAR struct file *filep;
+      FAR struct fd *fdp;
 
       /* Is there an inode associated with the file descriptor? */
 
-      if (filep == NULL)
+      if (fdlist_get2(&group->tg_fdlist, i, &filep, &fdp) < 0)
         {
           continue;
         }
@@ -1327,13 +1393,13 @@ static ssize_t proc_groupfd(FAR struct proc_file_s *procfile,
 #if CONFIG_FS_BACKTRACE > 0
           linesize += backtrace_format(procfile->line + linesize,
                                        STATUS_LINELEN - linesize,
-                                       filep->f_backtrace,
+                                       fdp->f_backtrace,
                                        CONFIG_FS_BACKTRACE);
 #endif
-          procfile->line[linesize - 2] = '\n';
+          procfile->line[linesize - 1] = '\n';
         }
 
-      fs_putfilep(filep);
+      file_put(filep);
       copysize   = procfs_memcpy(procfile->line, linesize,
                                  buffer, remaining, &offset);
 

@@ -73,7 +73,7 @@
  *
  *   - PLL source is HSI       -> 8MHz input (nominal)
  *   - PLL source predivider 2 -> 4MHz divided down PLL VCO clock output
- *   - PLL multipler is 12     -> 48MHz PLL VCO clock output (for USB)
+ *   - PLL multiplier is 12    -> 48MHz PLL VCO clock output (for USB)
  *
  * Resulting SYSCLK frequency is 8MHz x 12 / 2 = 48MHz
  *
@@ -198,7 +198,7 @@
  *   LED_SIGNAL           In a signal handler          No change
  *   LED_ASSERTION        An assertion failed          No change
  *   LED_PANIC            The system has crashed     OFF      Blinking
- *   LED_IDLE             STM32 is is sleep mode       Not used
+ *   LED_IDLE             STM32 is in sleep mode       Not used
  */
 
 #define LED_STARTED              0

@@ -259,6 +259,7 @@ struct xcpt_syscall_s
 
 struct xcptcontext
 {
+#ifdef CONFIG_ENABLE_ALL_SIGNALS
   /* These are saved copies of the context used during
    * signal processing.
    */
@@ -273,6 +274,7 @@ struct xcptcontext
   uint32_t sigreturn;
 
 #endif
+#endif /* CONFIG_ENABLE_ALL_SIGNALS */
 
   /* Register save area with XCPTCONTEXT_SIZE, only valid when:
    * 1.The task isn't running or
@@ -303,13 +305,15 @@ struct xcptcontext
 
 #ifdef CONFIG_ARCH_ADDRENV
 #ifdef CONFIG_ARCH_STACK_DYNAMIC
-  /* This array holds the physical address of the level 2 page table used
-   * to map the thread's stack memory.  This array will be initially of
-   * zeroed and would be back-up up with pages during page fault exception
-   * handling to support dynamically sized stacks for each thread.
+  /* Experimental support for dynamically sized stacks.  We using per-task
+   * l1entry, so only record the ustack virtual address base.
+   *
+   * REVISIT: ARCH_STACK_DYNAMIC not fully implemented.  Have to check
+   *          if want to use this feature.  L1 page table per-task stored,
+   *          we only record the ustackbase in the context.
    */
 
-  uintptr_t *ustack[ARCH_STACK_NSECTS];
+  uintptr_t ustackbase;
 #endif
 
 #ifdef CONFIG_ARCH_KERNEL_STACK

@@ -23,7 +23,7 @@
 set(SRCS qemu_boot.c qemu_serial.c qemu_irq.c qemu_timer.c)
 
 if(CONFIG_ARCH_ARMV7A)
-  list(APPEND SRCS qemu_memorymap.c)
+  list(APPEND SRCS qemu_pgalloc.c qemu_memorymap.c)
 endif()
 
 if(CONFIG_SMP)
@@ -36,6 +36,10 @@ endif()
 
 if(CONFIG_BUILD_KERNEL)
   list(APPEND SRCS qemu_pgalloc.c)
+endif()
+
+if(CONFIG_BUILD_PROTECTED)
+  list(APPEND SRCS qemu_userspace.c qemu_allocateheap.c)
 endif()
 
 target_sources(arch PRIVATE ${SRCS})

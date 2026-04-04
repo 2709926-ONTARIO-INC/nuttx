@@ -30,6 +30,7 @@
 #include <fcntl.h>
 #include <string.h>
 
+#include <nuttx/crc16.h>
 #include <nuttx/fs/fs.h>
 #include <nuttx/fs/ioctl.h>
 #include <nuttx/kmalloc.h>
@@ -80,7 +81,16 @@ struct littlefs_mountpt_s
   struct mtd_geometry_s geo;
   struct lfs_config     cfg;
   struct lfs            lfs;
+  bool                  readonly;
 };
+
+/* NuttX specific file attributes.
+ *
+ * If CONFIG_FS_LITTLEFS_ATTR_UPDATE is enabled, we store this structure
+ * on-disk as a littlefs user attribute with type=0.
+ *
+ * Note: the fields of this structure are in the host-endian, even on-disk.
+ */
 
 struct littlefs_attr_s
 {
@@ -367,6 +377,15 @@ static int littlefs_open(FAR struct file *filep, FAR const char *relpath,
 
   relpath = littlefs_convert_path(relpath);
   oflags = littlefs_convert_oflags(oflags);
+  if (fs->readonly)
+    {
+      if (oflags != LFS_O_RDONLY)
+        {
+          ret = -EROFS;
+          goto errout;
+        }
+    }
+
   ret = littlefs_convert_result(lfs_file_open(&fs->lfs, &priv->file,
                                               relpath, oflags));
   if (ret < 0)
@@ -416,11 +435,26 @@ static int littlefs_open(FAR struct file *filep, FAR const char *relpath,
         }
     }
 
-  /* Sync here in case of O_TRUNC haven't actually done immediately,
-   * e.g. total 8M, fileA 6M, O_TRUNC re-wrting fileA 6M, meet error.
+  /* In case of O_TRUNC, sync to commit the truncation.
+   *
+   * For example, consider a 6MB file on an 8MB filesystem.
+   * Open the file with O_TRUNC and (re)write some data until it grows
+   * to 6MB. Without this sync, it ends up with ENOSPC because
+   * littlefs doesn't commit the updates until sync/close and thus
+   * doesn't recycle the truncated space. Although it's normal for
+   * filesystems like littlefs, we automatically sync the truncation
+   * here to allow such a sequence to succeed, assuming it's what many
+   * of NuttX users expect.
+   *
+   * CAVEAT: On the other hand, this might surprise users who are familiar
+   * with the bare littlefs semantics.
    */
 
-  lfs_file_sync(&fs->lfs, &priv->file);
+  if (oflags & LFS_O_TRUNC)
+    {
+      lfs_file_sync(&fs->lfs, &priv->file);
+    }
+
   nxmutex_unlock(&fs->lock);
 
   /* Attach the private date to the struct file instance */
@@ -1121,14 +1155,50 @@ static int littlefs_rewinddir(FAR struct inode *mountpt,
 }
 
 /****************************************************************************
- * Name: littlefs_bind
- *
- * Description: This implements a portion of the mount operation. This
- *  function allocates and initializes the mountpoint private data and
- *  binds the driver inode to the filesystem private data. The final
- *  binding of the private data (containing the driver) to the
- *  mountpoint is performed by mount().
- *
+ * Name: littlefs_check
+ ****************************************************************************/
+
+#ifdef CONFIG_FS_LITTLEFS_DEBUG
+static void littlefs_check(FAR struct inode *drv, lfs_block_t block,
+                           lfs_size_t size, FAR const void *buffer,
+                           FAR struct mtd_geometry_s *geo)
+{
+  uint16_t crc16_check;
+  uint16_t crc16_ori;
+  int ret;
+
+  crc16_ori = crc16(buffer, geo->blocksize * size);
+
+  if (INODE_IS_MTD(drv))
+    {
+      ret = MTD_BREAD(drv->u.i_mtd, block, size, (FAR void *)buffer);
+    }
+  else
+    {
+      ret = drv->u.i_bops->read(drv, (FAR void *)buffer, block, size);
+    }
+
+  if (ret < 0)
+    {
+      ferr("[%s] read block failed!\n", __func__);
+      lib_dumpbuffer("buffer:", buffer, geo->blocksize * size);
+      DEBUGASSERT(0);
+    }
+  else
+    {
+      crc16_check = crc16(buffer, geo->blocksize * size);
+      if (crc16_ori != crc16_check)
+        {
+          ferr("CRC16 check failed\n");
+          lib_dumpbuffer("check:", buffer, geo->blocksize * size);
+          DEBUGASSERT(0);
+        }
+    }
+}
+#endif
+
+/****************************************************************************
+ * Name: littlefs_read_block
  ****************************************************************************/
 
 static int littlefs_read_block(FAR const struct lfs_config *c,
@@ -1152,6 +1222,9 @@ static int littlefs_read_block(FAR const struct lfs_config *c,
       ret = drv->u.i_bops->read(drv, buffer, block, size);
     }
 
+#ifdef CONFIG_FS_LITTLEFS_DEBUG
+  littlefs_check(drv, block, size, buffer, geo);
+#endif
   return ret >= 0 ? OK : ret;
 }
 
@@ -1168,6 +1241,11 @@ static int littlefs_write_block(FAR const struct lfs_config *c,
   FAR struct inode *drv = fs->drv;
   int ret;
 
+  if (fs->readonly)
+    {
+      return -EROFS;
+    }
+
   block = (block * c->block_size + off) / geo->blocksize;
   size  = size / geo->blocksize;
 
@@ -1180,6 +1258,9 @@ static int littlefs_write_block(FAR const struct lfs_config *c,
       ret = drv->u.i_bops->write(drv, buffer, block, size);
     }
 
+#ifdef CONFIG_FS_LITTLEFS_DEBUG
+  littlefs_check(drv, block, size, buffer, geo);
+#endif
   return ret >= 0 ? OK : ret;
 }
 
@@ -1193,6 +1274,11 @@ static int littlefs_erase_block(FAR const struct lfs_config *c,
   FAR struct littlefs_mountpt_s *fs = c->context;
   FAR struct inode *drv = fs->drv;
   int ret = OK;
+
+  if (fs->readonly)
+    {
+      return -EROFS;
+    }
 
   if (INODE_IS_MTD(drv))
     {
@@ -1216,6 +1302,11 @@ static int littlefs_sync_block(FAR const struct lfs_config *c)
   FAR struct inode *drv = fs->drv;
   int ret;
 
+  if (fs->readonly)
+    {
+      return -EROFS;
+    }
+
   if (INODE_IS_MTD(drv))
     {
       ret = MTD_IOCTL(drv->u.i_mtd, BIOC_FLUSH, 0);
@@ -1237,6 +1328,13 @@ static int littlefs_sync_block(FAR const struct lfs_config *c)
 
 /****************************************************************************
  * Name: littlefs_bind
+ *
+ * Description: This implements a portion of the mount operation. This
+ *  function allocates and initializes the mountpoint private data and
+ *  binds the driver inode to the filesystem private data. The final
+ *  binding of the private data (containing the driver) to the
+ *  mountpoint is performed by mount().
+ *
  ****************************************************************************/
 
 static int littlefs_bind(FAR struct inode *driver, FAR const void *data,
@@ -1360,6 +1458,11 @@ static int littlefs_bind(FAR struct inode *driver, FAR const void *data,
         {
           goto errout_with_fs;
         }
+    }
+
+  if (data && !strcmp(data, "ro"))
+    {
+      fs->readonly = true;
     }
 
   ret = littlefs_convert_result(lfs_mount(&fs->lfs, &fs->cfg));
@@ -1491,8 +1594,20 @@ static int littlefs_statfs(FAR struct inode *mountpt, FAR struct statfs *buf)
   ret = littlefs_convert_result(lfs_fs_size(&fs->lfs));
   if (ret > 0)
     {
-      buf->f_bfree -= ret;
-      buf->f_bavail -= ret;
+      /* Clamp to prevent underflow - lfs_fs_size can return more than
+       * block_count during active writes due to COW blocks
+       */
+
+      if ((fsblkcnt_t)ret < buf->f_bfree)
+        {
+          buf->f_bfree -= ret;
+          buf->f_bavail -= ret;
+        }
+      else
+        {
+          buf->f_bfree = 0;
+          buf->f_bavail = 0;
+        }
 
       ret = 0;
     }

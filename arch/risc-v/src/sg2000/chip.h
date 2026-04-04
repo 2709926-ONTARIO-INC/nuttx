@@ -49,15 +49,15 @@
  * Name: setintstack
  *
  * Description:
- *   Set the current stack pointer to the  "top" the correct interrupt stack
- *   for the current CPU.
+ *   Set the current stack pointer to the "top" of the correct interrupt
+ *   stack for the current CPU.
  *
  ****************************************************************************/
 
 #if defined(CONFIG_SMP) && CONFIG_ARCH_INTERRUPTSTACK > 15
 .macro  setintstack tmp0, tmp1
   up_cpu_index \tmp0
-  li    \tmp1, STACK_ALIGN_DOWN(CONFIG_ARCH_INTERRUPTSTACK)
+  li    \tmp1, STACKFRAME_ALIGN_DOWN(CONFIG_ARCH_INTERRUPTSTACK)
   mul   \tmp1, \tmp0, \tmp1
   la    \tmp0, g_intstacktop
   sub   sp, \tmp0, \tmp1

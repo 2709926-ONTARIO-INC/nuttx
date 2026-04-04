@@ -349,7 +349,7 @@ int board_switch_boot(FAR const char *system);
  * Input Parameters:
  *   path     - Path to the new application firmware image to be booted.
  *   hdr_size - Image header size in bytes. This value may be useful for
- *              skipping metadata information preprended to the application
+ *              skipping metadata information prepended to the application
  *              image.
  *
  * Returned Value:
@@ -633,6 +633,26 @@ void board_autoled_on(int led);
 void board_autoled_off(int led);
 #else
 #  define board_autoled_off(led)
+#endif
+
+/****************************************************************************
+ * Name: board_macaddr
+ *
+ * Description:
+ *   Get the network driver mac address.
+ *
+ * Input Parameters:
+ *   ifname   - The interface name.
+ *   macaddr  - The mac address.
+ *
+ * Returned Value:
+ *   Zero (OK) is returned on success; a negated errno value is returned on
+ *   any failure.
+ *
+ ****************************************************************************/
+
+#ifdef CONFIG_BOARDCTL_MACADDR
+int board_macaddr(FAR const char *ifname, FAR uint8_t *macaddr);
 #endif
 
 /****************************************************************************

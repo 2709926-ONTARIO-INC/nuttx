@@ -42,7 +42,6 @@ Command                Depends on Configuration                    Can Be Disabl
 :ref:`cmdcmp`          ``CONFIG_NSH_DISABLE_CMP``                  .
 :ref:`cmdcp`           ``CONFIG_NSH_DISABLE_CP``                   .
 :ref:`cmddate`         ``CONFIG_NSH_DISABLE_DATE``                 .
-:ref:`cmddd`           ``CONFIG_NSH_DISABLE_DD``                   .
 :ref:`cmddelroute`     ``CONFIG_NET`` && ``CONFIG_NET_ROUTE``      ``CONFIG_NSH_DISABLE_DELROUTE``
 :ref:`cmddf`           ! ``CONFIG_DISABLE_MOUNTPOINT``             ``CONFIG_NSH_DISABLE_DF``
 :ref:`cmddirname`      ``CONFIG_NSH_DISABLE_DIRNAME``              .
@@ -193,6 +192,13 @@ Configuration                        Description
                                      be executed from the NSH command line (see apps/README.txt for
                                      more information). This required ``CONFIG_BUILTIN`` to enable
                                      NuttX support for "builtin" applications.
+
+ ``CONFIG_NSH_BUILTIN_AS_COMMAND``   If enabled, then "builtin" applications will be executed directly
+                                     from the NSH command line without creating a separate thread. The
+                                     advantage is simpler and faster execution. The disadvantage is that
+                                     background execution is not supported. This required ``CONFIG_BUILTIN``
+                                     and ``CONFIG_NSH_BUILTIN_APPS`` to enable NuttX support for "builtin"
+                                     applications.
 
  ``CONFIG_NSH_FILEIOSIZE``           Size of a static I/O buffer used for file access (ignored if there
                                      is no file system). Default is 1024.

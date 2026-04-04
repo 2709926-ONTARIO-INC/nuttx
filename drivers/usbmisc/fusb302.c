@@ -632,7 +632,7 @@ void enableccmeas(struct fusb302_dev_s *priv, enum cc_meas_e measure,
  *
  * Input Parameters:
  *  priv      - pointer to device structure
- *  threhold  - MDAC threshold value
+ *  threshold - MDAC threshold value
  *
  * Returned Value:
  *   none
@@ -648,7 +648,7 @@ void setmdac(struct fusb302_dev_s *priv, enum src_current_e thresh)
   regval |= MEASURE_MDAC(src_mdac_val[thresh]);
 
   fusb302_putreg(priv, FUSB302_MEASURE_REG, regval);
-  nxsig_usleep(150);
+  nxsched_usleep(150);
 }
 
 /****************************************************************************

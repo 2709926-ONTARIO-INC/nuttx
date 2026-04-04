@@ -33,7 +33,7 @@
 #include <debug.h>
 
 #include <nuttx/arch.h>
-#include <nuttx/spinlock.h>
+#include <nuttx/irq.h>
 
 #include "arm_internal.h"
 #include "imx9_gpio.h"
@@ -64,11 +64,69 @@ struct imx9_portisr_s
 
 static struct imx9_portisr_s g_isrtab[IMX9_GPIO_NPORTS];
 
-static spinlock_t g_gpioirq_lock = SP_UNLOCKED;
-
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
+
+/****************************************************************************
+ * Name: imx9_get_irqline_for_port
+ *
+ * Description:
+ *   iMX9 has two interrupt sources for each pin, this function fetches
+ *   which line is configured for a given port
+ *
+ ****************************************************************************/
+
+static inline uint32_t imx9_get_irqline_for_port(uint32_t port)
+{
+    switch (port)
+      {
+        case GPIO1:
+#ifdef CONFIG_IMX9_GPIO1_IRQ_OUT_LINE0
+          return 0;
+#elif defined(CONFIG_IMX9_GPIO1_IRQ_OUT_LINE1)
+          return 1;
+#endif
+        break;
+
+      case GPIO2:
+#ifdef CONFIG_IMX9_GPIO2_IRQ_OUT_LINE0
+        return 0;
+#elif defined(CONFIG_IMX9_GPIO2_IRQ_OUT_LINE1)
+        return 1;
+#endif
+      break;
+
+      case GPIO3:
+#ifdef CONFIG_IMX9_GPIO3_IRQ_OUT_LINE0
+        return 0;
+#elif defined(CONFIG_IMX9_GPIO3_IRQ_OUT_LINE1)
+        return 1;
+#endif
+      break;
+
+      case GPIO4:
+#ifdef CONFIG_IMX9_GPIO4_IRQ_OUT_LINE0
+        return 0;
+#elif defined(CONFIG_IMX9_GPIO4_IRQ_OUT_LINE1)
+        return 1;
+#endif
+      break;
+
+      case GPIO5:
+#ifdef CONFIG_IMX9_GPIO5_IRQ_OUT_LINE0
+        return 0;
+#elif defined(CONFIG_IMX9_GPIO5_IRQ_OUT_LINE1)
+        return 1;
+#endif
+      break;
+
+      default:
+        return 0;
+      }
+
+    return 0;
+}
 
 /****************************************************************************
  * Name: imx9_gpio_interrupt
@@ -88,7 +146,15 @@ static int imx9_gpio_interrupt(int irq, void *context, void *arg)
 
   /* Get the pending interrupt indications */
 
-  regaddr = IMX9_GPIO_ISFR0(port);
+  if (imx9_get_irqline_for_port(port))
+    {
+      regaddr = IMX9_GPIO_ISFR1(port);
+    }
+  else
+    {
+      regaddr = IMX9_GPIO_ISFR0(port);
+    }
+
   status  = getreg32(regaddr);
 
   /* Decode the pending interrupts */
@@ -172,23 +238,70 @@ void imx9_gpioirq_initialize(void)
   up_disable_irq(IMX9_IRQ_GPIO4_0);
   up_disable_irq(IMX9_IRQ_GPIO4_1);
 
+  up_disable_irq(IMX9_IRQ_GPIO5_0);
+  up_disable_irq(IMX9_IRQ_GPIO5_1);
+
   /* Attach the common GPIO interrupt handler and enable the interrupt */
 
+#ifdef CONFIG_IMX9_GPIO1_IRQ_OUT_LINE0
   DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO1_0,
                          imx9_gpio_interrupt, (void *)GPIO_PORT1));
   up_enable_irq(IMX9_IRQ_GPIO1_0);
+#endif
 
+#ifdef CONFIG_IMX9_GPIO1_IRQ_OUT_LINE0
+  DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO1_1,
+                         imx9_gpio_interrupt, (void *)GPIO_PORT1));
+  up_enable_irq(IMX9_IRQ_GPIO1_1);
+#endif
+
+#ifdef CONFIG_IMX9_GPIO2_IRQ_OUT_LINE0
   DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO2_0,
                          imx9_gpio_interrupt, (void *)GPIO_PORT2));
   up_enable_irq(IMX9_IRQ_GPIO2_0);
+#endif
 
+#ifdef CONFIG_IMX9_GPIO2_IRQ_OUT_LINE1
+  DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO2_1,
+                         imx9_gpio_interrupt, (void *)GPIO_PORT2));
+  up_enable_irq(IMX9_IRQ_GPIO2_1);
+#endif
+
+#ifdef CONFIG_IMX9_GPIO3_IRQ_OUT_LINE0
   DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO3_0,
                          imx9_gpio_interrupt, (void *)GPIO_PORT3));
   up_enable_irq(IMX9_IRQ_GPIO3_0);
+#endif
 
+#ifdef CONFIG_IMX9_GPIO3_IRQ_OUT_LINE1
+  DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO3_1,
+                         imx9_gpio_interrupt, (void *)GPIO_PORT3));
+  up_enable_irq(IMX9_IRQ_GPIO3_1);
+#endif
+
+#ifdef CONFIG_IMX9_GPIO4_IRQ_OUT_LINE0
   DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO4_0,
                          imx9_gpio_interrupt, (void *)GPIO_PORT4));
   up_enable_irq(IMX9_IRQ_GPIO4_0);
+#endif
+
+#ifdef CONFIG_IMX9_GPIO4_IRQ_OUT_LINE1
+  DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO4_1,
+                         imx9_gpio_interrupt, (void *)GPIO_PORT4));
+  up_enable_irq(IMX9_IRQ_GPIO4_1);
+#endif
+
+#ifdef CONFIG_IMX9_GPIO5_IRQ_OUT_LINE0
+  DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO5_0,
+                         imx9_gpio_interrupt, (void *)GPIO_PORT5));
+  up_enable_irq(IMX9_IRQ_GPIO5_0);
+#endif
+
+#ifdef CONFIG_IMX9_GPIO5_IRQ_OUT_LINE1
+  DEBUGVERIFY(irq_attach(IMX9_IRQ_GPIO5_1,
+                         imx9_gpio_interrupt, (void *)GPIO_PORT5));
+  up_enable_irq(IMX9_IRQ_GPIO5_1);
+#endif
 }
 
 /****************************************************************************
@@ -206,12 +319,12 @@ int imx9_gpioirq_attach(gpio_pinset_t pinset, xcpt_t isr, void *arg)
 
   /* Atomically change the handler */
 
-  irqstate_t flags = spin_lock_irqsave(&g_gpioirq_lock);
+  irqstate_t flags = enter_critical_section();
 
   g_isrtab[port].pins[pin].isr = isr;
   g_isrtab[port].pins[pin].arg = arg;
 
-  spin_unlock_irqrestore(&g_gpioirq_lock, flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -252,6 +365,10 @@ int imx9_gpioirq_enable(gpio_pinset_t pinset)
   uint32_t  regval;
   uintptr_t regaddr;
 
+  regval = getreg32(IMX9_GPIO_ICNS(port));
+  regval &= ~(1 << (imx9_get_irqline_for_port(port)));
+  putreg32(regval, IMX9_GPIO_ICNS(port));
+
   /* Perform RMW to the specific pin */
 
   regaddr = IMX9_GPIO_ICRN(port, pin);
@@ -277,6 +394,11 @@ int imx9_gpioirq_enable(gpio_pinset_t pinset)
   else /* GPIO_INT_FALLINGEDGE */
     {
       regval |= IMX9_GPIO_ICRN_FALLING;
+    }
+
+  if (imx9_get_irqline_for_port(port))
+    {
+      regval |= IMX9_GPIO_ICRN_IRQS;
     }
 
   putreg32(regval, regaddr);

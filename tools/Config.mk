@@ -95,7 +95,7 @@ else
 
 HOSTCC ?= cc
 HOSTCFLAGS ?= -O2 -Wall -Wstrict-prototypes -Wshadow
-HOSTCFLAGS += -DHAVE_STRTOK_C=1
+HOSTCFLAGS += -DHAVE_STRTOK_C=1 -DHAVE_STRNDUP=1
 
 ifeq ($(CONFIG_WINDOWS_CYGWIN),y)
 HOSTCFLAGS += -DHOST_CYGWIN=1
@@ -635,7 +635,7 @@ define CLONE
 		if [ ! -d $3 ]; then \
 			git clone --quiet $1 $3; \
 		fi; \
-		cp -fr $3 $2; \
+		$(DIRLINK) $3 $2; \
 	fi
 	$(ECHO_END)
 endef
@@ -746,7 +746,9 @@ ifeq ($(CONFIG_LIBCXX),y)
   ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)libcxx
 else ifeq ($(CONFIG_UCLIBCXX),y)
   ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)uClibc++
-else
+endif
+
+ifeq ($(CONFIG_LIBMINIABI),y)
   ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)cxx
   ifeq ($(CONFIG_ETL),y)
     ARCHXXINCLUDES += ${INCSYSDIR_PREFIX}$(TOPDIR)$(DELIM)include$(DELIM)etl

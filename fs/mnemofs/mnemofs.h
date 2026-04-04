@@ -338,73 +338,129 @@ static mfs_t inline mfs_blkremsz(FAR const struct mfs_sb_s * const sb,
 static inline mfs_t mfs_ctz(const uint32_t x)
 {
   if (predict_false(x == 0))
-  {
-/* Special case, since we're using this for the CTZ skip list. The 0th
- * block has no pointers.
- */
+    {
+      /* Special case, since we're using this for the CTZ skip list. The 0th
+       * block has no pointers.
+       */
 
-    return 0;
-  }
-
+      return 0;
+    }
 #if defined(__GNUC__)
   return __builtin_ctz(x);
 #else
   uint32_t c;
 
-/* Credits:
- * http://graphics.stanford.edu/~seander/bithacks.html#ZerosOnRightBinSearch
- */
+  /* Credits:
+   * http://graphics.stanford.edu/~seander/bithacks.html
+   * #ZerosOnRightBinSearch
+   */
 
   if (x & 0x1)
-  {
-    /* special case for odd x (assumed to happen half of the time) */
+    {
+      /* special case for odd x (assumed to happen half of the time) */
 
-    c = 0;
-  }
+      c = 0;
+    }
   else
-  {
-    c = 1;
-    if ((x & 0xffff) == 0)
     {
-      x >>= 16;
-      c += 16;
+      c = 1;
+      if ((x & 0xffff) == 0)
+        {
+          x >>= 16;
+          c += 16;
+        }
+
+      if ((x & 0xff) == 0)
+        {
+          x >>= 8;
+          c += 8;
+        }
+
+      if ((x & 0xf) == 0)
+        {
+          x >>= 4;
+          c += 4;
+        }
+
+      if ((x & 0x3) == 0)
+        {
+          x >>= 2;
+          c += 2;
+        }
+
+      c -= x & 0x1;
     }
-    if ((x & 0xff) == 0)
-    {
-      x >>= 8;
-      c += 8;
-    }
-    if ((x & 0xf) == 0)
-    {
-      x >>= 4;
-      c += 4;
-    }
-    if ((x & 0x3) == 0)
-    {
-      x >>= 2;
-      c += 2;
-    }
-    c -= x & 0x1;
-  }
+
   return c;
 #endif
 }
 
+/****************************************************************************
+ * Name: mfs_clz
+ *
+ * Description:
+ *   Count Leading Zeros. Returns the number of leading zeros in a 32-bit
+ *   integer.
+ *
+ * Input Parameters:
+ *   x - 32-bit integer to check.
+ *
+ * Returned Value:
+ *   The number of leading zeros.
+ *
+ ****************************************************************************/
+
 static inline mfs_t mfs_clz(const uint32_t x)
 {
   if (predict_false(x == UINT32_MAX))
-  {
-/* Special case, since we're using this for the CTZ skip list. The 0th
- * block has no pointers.
- */
+    {
+      /* Special case, since we're using this for the CTZ skip list. The 0th
+       * block has no pointers.
+       */
 
-    return 0;
-  }
-
+      return 0;
+    }
 #if defined(__GNUC__)
   return __builtin_clz(x);
 #else
-  return 0; /* TODO */
+  uint32_t n = 0;
+  uint32_t x_tmp = x;
+
+  if (x_tmp == 0)
+    {
+      return 32;
+    }
+
+  if (x_tmp <= 0x0000ffff)
+    {
+      n += 16;
+      x_tmp <<= 16;
+    }
+
+  if (x_tmp <= 0x00ffffff)
+    {
+      n += 8;
+      x_tmp <<= 8;
+    }
+
+  if (x_tmp <= 0x0fffffff)
+    {
+      n += 4;
+      x_tmp <<= 4;
+    }
+
+  if (x_tmp <= 0x3fffffff)
+    {
+      n += 2;
+      x_tmp <<= 2;
+    }
+
+  if (x_tmp <= 0x7fffffff)
+    {
+      n += 1;
+    }
+
+  return n;
 #endif
 }
 
@@ -1041,10 +1097,6 @@ int mfs_erase_nblks(FAR const struct mfs_sb_s * const sb, const off_t blk,
  *
  ****************************************************************************/
 
-uint8_t mfs_arrhash(FAR const char *arr, ssize_t len);
-
-/* TODO: Put below in place of above. */
-
 uint16_t mfs_hash(FAR const char *arr, ssize_t len);
 
 /****************************************************************************
@@ -1104,10 +1156,10 @@ FAR char *mfs_ser_str(FAR const char * const str, const mfs_t len,
  * Name: mfs_deser_str
  *
  * Description:
- *   Deserialize a string from intput.
+ *   Deserialize a string from input.
  *
  * Input Parameters:
- *   in  - Intput array from where to deserialize.
+ *   in  - Input array from where to deserialize.
  *   str - String to deserialize
  *   len - Length of string
  *
@@ -1360,7 +1412,7 @@ int mfs_ctz_wrtnode(FAR struct mfs_sb_s * const sb,
  *   number of index `idx_dest`.
  *
  *   The source is preferably the last CTZ block in the CTZ list, but it can
- *   realistically be any CTZ block in the CTZ list whos position is known.
+ *   realistically be any CTZ block in the CTZ list whose position is known.
  *   However, `idx_dest <= idx_src` has to be followed. Takes O(log(n))
  *   complexity to travel.
  *
@@ -1571,7 +1623,7 @@ int mfs_mn_fmt(FAR struct mfs_sb_s * const sb, const mfs_t blk1,
  * Input Parameters:
  *   sb      - Superblock instance of the device.
  *   root    - New location of the root of the file system.
- *   root_sz - New size of the CTZ list of the root of the file syste.
+ *   root_sz - New size of the CTZ list of the root of the file system.
  *
  * Returned Value:
  *   0   - OK
@@ -1652,8 +1704,8 @@ mfs_t mfs_get_fsz(FAR struct mfs_sb_s * const sb,
  *
  * Assumptions/Limitations:
  *   This allocates the `path` array in heap, and transfers the ownership
- *   of this array to the caller. It's the caller's reponsibility to use this
- *   with `mfs_free_patharr`.
+ *   of this array to the caller. It's the caller's responsibility to use
+ *   this with `mfs_free_patharr`.
  *
  ****************************************************************************/
 

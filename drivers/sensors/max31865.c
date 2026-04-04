@@ -20,6 +20,19 @@
  *
  ****************************************************************************/
 
+/* WARNING for developers:
+ *
+ * This driver uses the legacy style of writing sensor drivers for NuttX. The
+ * project has since decided to adopt a new sensor framework in order to
+ * have a consistent API and feature-set.
+ *
+ * Sensors which use the uORB framework are typically suffixed "_uorb". You
+ * can also visit the documentation about the new sensor framework to learn
+ * more.
+ */
+
+#warning "This is a deprecated legacy sensor driver."
+
 /* Character driver for the Maxim MAX31865 Thermocouple-to-Digital Converter
  *
  * NOTE: Some Maxim MAX31865 chips have an issue it report value 25% lower
@@ -54,10 +67,6 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/****************************************************************************
- * Private
- ****************************************************************************/
-
 #define MAX31865_CONFIG_REG             0x00
 # define MAX31865_BIAS_ON               (1 << 7)
 # define MAX31865_AUTO_CONVERSION       (1 << 6)
@@ -86,6 +95,10 @@
 
 #define RTD_A                           (3.9083e-3)
 #define RTD_B                           (-5.775e-7)
+
+/****************************************************************************
+ * Private Types
+ ****************************************************************************/
 
 struct max31865_dev_s
 {

@@ -40,7 +40,7 @@ endfunction()
 # ~~~
 # add_dynamic_rcsrcs & add_dynamic_rcraws
 # provide a way to add dynamic ROMFS data
-# which genrate during the build process
+# which generate during the build process
 # to the final romfs_holder target
 # ~~~
 function(add_dynamic_rcsrcs)
@@ -235,7 +235,8 @@ function(nuttx_add_cromfs)
             copy_directory ${PATH} cromfs_${NAME} \; fi
     COMMAND if \[ \"${FILES}\" != \"\" \]; then ${CMAKE_COMMAND} -E copy
             ${FILES} cromfs_${NAME} \; fi
-    COMMAND ${CMAKE_BINARY_DIR}/bin/gencromfs cromfs_${NAME} cromfs_${NAME}.c
+    COMMAND ${CMAKE_BINARY_DIR}/bin_host/gencromfs cromfs_${NAME}
+            cromfs_${NAME}.c
     DEPENDS ${DEPENDS})
 
   add_library(cromfs_${NAME} OBJECT cromfs_${NAME}.c)
@@ -244,7 +245,7 @@ endfunction()
 
 # ~~~
 # The files of romfs may be added in
-# ANY PROCESS IN ANY DIRECORY,
+# ANY PROCESS IN ANY DIRECTORY,
 # so we process all the targets at the end.
 # ~~~
 function(process_all_directory_romfs)
@@ -340,12 +341,18 @@ function(process_all_directory_romfs)
         DEPENDS ${dyn_deps})
       list(APPEND DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_ETC_SUFFIX})
     else()
+      list(FIND DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_ETC_SUFFIX} index)
+      if(index GREATER -1)
+        set(APPEND_OPTION APPEND)
+      else()
+        set(APPEND_OPTION)
+      endif()
       list(APPEND DEPENDS ${SOURCE_ETC_PREFIX}/${SOURCE_ETC_SUFFIX})
       add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_ETC_SUFFIX}
         COMMAND
           ${CMAKE_COMMAND} -E copy ${SOURCE_ETC_PREFIX}/${SOURCE_ETC_SUFFIX}
-          ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_ETC_SUFFIX}
+          ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_ETC_SUFFIX} ${APPEND_OPTION}
         DEPENDS ${dyn_deps})
       list(APPEND DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_ETC_SUFFIX})
     endif()

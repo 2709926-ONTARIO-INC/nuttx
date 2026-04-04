@@ -171,6 +171,7 @@ struct xcptcontext
 
   uint32_t regs[XCPTCONTEXT_REGS];
 
+#ifdef CONFIG_ENABLE_ALL_SIGNALS
   /* These are saved copies of LR and CPSR used during
    * signal processing.
    *
@@ -182,6 +183,7 @@ struct xcptcontext
 
   uint32_t saved_pc;
   uint32_t saved_flags;
+#endif /* CONFIG_ENABLE_ALL_SIGNALS */
 };
 #endif
 
@@ -228,8 +230,7 @@ static inline_function void up_irq_restore(irqstate_t flags)
 
 /* Enable IRQs */
 
-static inline_function void up_irq_enable(void) always_inline_function;
-static inline_function void up_irq_enable(void)
+static always_inline_function void up_irq_enable(void)
 {
   irqstate_t flags;
   mfspr(SPR_SYS_SR, flags);

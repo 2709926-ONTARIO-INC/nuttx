@@ -51,7 +51,7 @@
 
 struct pcm_decode_s
 {
-  /* This is is our our appearance to the outside world.  This *MUST* be the
+  /* This is our appearance to the outside world.  This *MUST* be the
    * first element of the structure so that we can freely cast between types
    * struct audio_lowerhalf and struct pcm_decode_s.
    */
@@ -804,7 +804,7 @@ static int pcm_shutdown(FAR struct audio_lowerhalf_s *dev)
   /* Defer the operation to the lower device driver */
 
   lower = priv->lower;
-  DEBUGASSERT(lower && lower->ops->start);
+  DEBUGASSERT(lower && lower->ops->shutdown);
 
   audinfo("Defer to lower shutdown\n");
   return lower->ops->shutdown(lower);

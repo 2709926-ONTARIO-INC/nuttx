@@ -362,6 +362,13 @@ static inline int fat_parsesfname(FAR const char **path,
 #ifdef CONFIG_FAT_LCNAMES
           dirinfo->fd_ntflags = ntlcfound & ntlcenable;
 #endif
+          /* Ignore sequences of //... in the filename */
+
+          while (node && *node == '/')
+            {
+              node++;
+            }
+
           *terminator = ch;
           *path       = node;
           return OK;
@@ -599,6 +606,13 @@ static inline int fat_parselfname(FAR const char **path,
           /* Null terminate the string */
 
           dirinfo->fd_lfname[ndx] = '\0';
+
+          /* Ignore sequences of //... in the filename */
+
+          while (node && *node == '/')
+            {
+              node++;
+            }
 
           /* Return the remaining sub-string and the terminating character. */
 
@@ -1831,8 +1845,8 @@ static inline int fat_getsfname(FAR uint8_t *direntry, FAR char *buffer,
 
       /* In this version, we never write 0xe5 in the directory filenames
        * (because we do not handle any character sets where 0xe5 is valid
-       * in a filaname), but we could eencounter this in a filesystem
-       * written by some other system
+       * in a filename), but we could eencounter this in a filesystem
+       * written by some other system.
        */
 
       if (ndx == 0 && ch == DIR0_E5)

@@ -951,7 +951,7 @@ static ssize_t smart_write(FAR struct inode *inode,
 
   /* I think maybe we need to lock on a mutex here */
 
-  /* Get the aligned block.  Here is is assumed: (1) The number of R/W blocks
+  /* Get the aligned block.  Here it is assumed: (1) The number of R/W blocks
    * per erase block is a power of 2, and (2) the erase begins with that same
    * alignment.
    */
@@ -2884,7 +2884,7 @@ static int smart_relocate_static_data(FAR struct smart_struct_s *dev,
 
       x = minblock;
 
-      /* We are resuing nextsector and newsector variables here simply as
+      /* We are reusing nextsector and newsector variables here simply as
        * variables for displaying debug data.  I have learned through my
        * years of programming that this is a really good way to create
        * spaghetti code, but I didn't want to add stack variables just
@@ -4150,7 +4150,7 @@ errout:
  * Name: smart_write_wearstatus
  *
  * Description:  Writes the wear leveling status bits to sector zero (and
- *               possibly others if it doesn't fit) such that is is persisted
+ *               possibly others if it doesn't fit) such that it is persisted
  *               across OS reboots.
  *
  ****************************************************************************/
@@ -4271,7 +4271,7 @@ errout:
  * Name: smart_read_wearstatus
  *
  * Description:  Reads the wear leveling status bits from sector zero (and
- *               possibly others if it doesn't fit) such that is is persisted
+ *               possibly others if it doesn't fit) such that it is persisted
  *               across OS reboots.
  *
  ****************************************************************************/
@@ -5312,7 +5312,7 @@ static inline int smart_allocsector(FAR struct smart_struct_s *dev,
 
       if (allocsect == NULL)
         {
-          ferr("ERROR: Out of memory allocting sector\n");
+          ferr("ERROR: Out of memory allocating sector\n");
           return -ENOMEM;
         }
 

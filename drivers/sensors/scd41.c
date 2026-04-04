@@ -20,6 +20,19 @@
  *
  ****************************************************************************/
 
+/* WARNING for developers:
+ *
+ * This driver uses the legacy style of writing sensor drivers for NuttX. The
+ * project has since decided to adopt a new sensor framework in order to
+ * have a consistent API and feature-set.
+ *
+ * Sensors which use the uORB framework are typically suffixed "_uorb". You
+ * can also visit the documentation about the new sensor framework to learn
+ * more.
+ */
+
+#warning "This is a deprecated legacy sensor driver."
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
@@ -55,10 +68,6 @@
 #  define scd41_dbg(x, ...)    sninfo(x, ##__VA_ARGS__)
 #endif
 
-#ifndef CONFIG_SCD41_I2C_FREQUENCY
-#  define CONFIG_SCD41_I2C_FREQUENCY 100000
-#endif
-
 #define SCD41_I2C_RETRIES 3
 
 /* SCD41 command words */
@@ -90,7 +99,7 @@
 #define SCD41_DEFAULT_TEMPERATURE_OFFSET    0
 
 /****************************************************************************
- * Private
+ * Private Types
  ****************************************************************************/
 
 struct scd41_dev_s
@@ -480,11 +489,7 @@ static int scd41_read_values(FAR struct scd41_dev_s *priv, FAR float *temp,
                   return ret;
                 }
 
-              ret = nxsig_usleep(500 * 1000);
-              if (ret == -EINTR)
-                {
-                  return ret;
-                }
+              nxsched_usleep(500 * 1000);
             }
           else
             {

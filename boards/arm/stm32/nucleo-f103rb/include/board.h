@@ -53,7 +53,7 @@
 #define STM32_HSE_FREQUENCY     STM32_BOARD_XTAL
 #define STM32_LSE_FREQUENCY     32768            /* X2 on board */
 
-/* PLL source is HSE/1, PLL multipler is 9:
+/* PLL source is HSE/1, PLL multiplier is 9:
  *   PLL frequency is 8MHz (XTAL) x 9 = 72MHz
  */
 
@@ -136,7 +136,7 @@
  *   LED_SIGNAL          In a signal handler      No change
  *   LED_ASSERTION       An assertion failed      No change
  *   LED_PANIC           The system has crashed   Blinking
- *   LED_IDLE            STM32 is is sleep mode   Not used
+ *   LED_IDLE            STM32 is in sleep mode   Not used
  */
 
 #define LED_STARTED      0

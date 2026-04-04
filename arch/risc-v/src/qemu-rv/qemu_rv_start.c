@@ -166,9 +166,11 @@ void qemu_rv_start(int mhartid, const char *dtb)
     }
 #endif
 
-  /* Configure FPU */
+  /* Configure FPU and VPU */
 
   riscv_fpuconfig();
+
+  riscv_vpuconfig();
 
   if (mhartid > 0)
     {
@@ -197,7 +199,7 @@ void qemu_rv_start(int mhartid, const char *dtb)
 
   showprogress('B');
 
-  /* Do board initialization */
+  /* TODO: Additional initialization */
 
   showprogress('C');
 
@@ -225,6 +227,9 @@ void qemu_rv_start(int mhartid, const char *dtb)
 cpux:
 
 #ifdef CONFIG_SMP
+#  ifdef CONFIG_BUILD_PROTECTED
+  qemu_rv_configure_mpu();
+#  endif
   riscv_cpu_boot(mhartid);
 #endif
 

@@ -39,7 +39,7 @@
 #include "hardware/esp32s2_soc.h"
 
 #include "esp32s2_tim.h"
-#include "esp32s2_clockconfig.h"
+#include "esp_clk.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -440,7 +440,7 @@ static int esp32s2_timer_maxtimeout(struct timer_lowerhalf_s *lower,
  * Name: esp32s2_setcallback
  *
  * Description:
- *   Set the provided callback to be called at timeout from withing the
+ *   Set the provided callback to be called at timeout from within the
  *   ISR.
  *
  * Input Parameters:
